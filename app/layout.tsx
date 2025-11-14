@@ -11,8 +11,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Prectic - Technology Services",
-  description: "Core Technology services - Security, Performance, and more",
+  title: "PracticApp - Kıbrısta Hayatı Kolaylaştıran Uygulamalar",
+  description: "Tek üyelikle tüm platformlara erişim. Fırsatlar, indirimler, etkinlik biletleri, restoran rezervasyonları ve daha fazlası. Kupon Kıbrıs ve Gişe Kıbrıs ile Kıbrıs'taki günlük yaşamını tek uygulamadan yönet.",
 };
 
 export default function RootLayout({
