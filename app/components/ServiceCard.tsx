@@ -7,6 +7,7 @@ interface ServiceCardProps {
   logoPosition?: "left" | "right";
   image: string;
   description: string;
+  websiteUrl?: string;
   socialLinks?: {
     facebook?: string;
     instagram?: string;
@@ -22,10 +23,11 @@ export default function ServiceCard({
   logoPosition = "left",
   image,
   description,
+  websiteUrl,
   socialLinks,
 }: ServiceCardProps) {
-  return (
-    <div className="bg-gray-200 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300">
+  const CardContent = (
+    <div className="bg-gray-200 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 cursor-pointer">
       <div>
         
       </div>
@@ -114,5 +116,15 @@ export default function ServiceCard({
       </div>
     </div>
   );
+
+  if (websiteUrl) {
+    return (
+      <Link href={websiteUrl} target="_blank" rel="noopener noreferrer" className="block">
+        {CardContent}
+      </Link>
+    );
+  }
+
+  return CardContent;
 }
 

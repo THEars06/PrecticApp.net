@@ -11,6 +11,7 @@ export default function Home() {
       image: "/GPW.png",
       description:
         "Etkinlik biletleri bir tık uzağında.",
+      websiteUrl: "https://www.gisekibris.com",
       socialLinks: {
         instagram: "https://www.instagram.com/gisekibris/",
         facebook: "https://www.facebook.com/gisekibris/",
@@ -25,6 +26,7 @@ export default function Home() {
       image: "/KKW.png",
       description:
         "İndirimler ve fırsatlar bir tık uzağında.",
+      websiteUrl: "https://www.kuponkibris.com",
       socialLinks: {
         instagram: "https://www.instagram.com/kuponkibris/",
         facebook: "https://www.facebook.com/kuponkibris/",
@@ -53,6 +55,7 @@ export default function Home() {
               logoPosition={service.logoPosition}
               image={service.image}
               description={service.description}
+              websiteUrl={service.websiteUrl}
               socialLinks={service.socialLinks}
             />
           ))}
