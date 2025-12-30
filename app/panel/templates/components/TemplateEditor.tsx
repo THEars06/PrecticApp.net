@@ -41,7 +41,7 @@ export default function TemplateEditor({
         embedAsBase64: true,
         upload: false,
         dropzone: true,
-        uploadFile: (e: any) => {
+        uploadFile: async (e: any) => {
           const files = e.dataTransfer ? e.dataTransfer.files : e.target.files;
           
           Array.from(files as FileList).forEach((file: any) => {
@@ -251,38 +251,38 @@ export default function TemplateEditor({
             open: false,
             properties: [
               { name: 'Display', property: 'display', type: 'select', defaults: 'block', options: [
-                { value: 'block', name: 'Block' },
-                { value: 'inline-block', name: 'Inline Block' },
-                { value: 'flex', name: 'Flex' },
-                { value: 'grid', name: 'Grid' },
-                { value: 'inline-flex', name: 'Inline Flex' },
-                { value: 'none', name: 'None' },
+                { id: 'block', value: 'block', name: 'Block' },
+                { id: 'inline-block', value: 'inline-block', name: 'Inline Block' },
+                { id: 'flex', value: 'flex', name: 'Flex' },
+                { id: 'grid', value: 'grid', name: 'Grid' },
+                { id: 'inline-flex', value: 'inline-flex', name: 'Inline Flex' },
+                { id: 'none', value: 'none', name: 'None' },
               ]},
               { name: 'Flex Direction', property: 'flex-direction', type: 'select', defaults: 'row', options: [
-                { value: 'row', name: 'Row →' },
-                { value: 'row-reverse', name: 'Row Reverse ←' },
-                { value: 'column', name: 'Column ↓' },
-                { value: 'column-reverse', name: 'Column Reverse ↑' },
+                { id: 'row', value: 'row', name: 'Row →' },
+                { id: 'row-reverse', value: 'row-reverse', name: 'Row Reverse ←' },
+                { id: 'column', value: 'column', name: 'Column ↓' },
+                { id: 'column-reverse', value: 'column-reverse', name: 'Column Reverse ↑' },
               ]},
               { name: 'Justify Content', property: 'justify-content', type: 'select', defaults: 'flex-start', options: [
-                { value: 'flex-start', name: 'Start' },
-                { value: 'flex-end', name: 'End' },
-                { value: 'center', name: 'Center' },
-                { value: 'space-between', name: 'Space Between' },
-                { value: 'space-around', name: 'Space Around' },
-                { value: 'space-evenly', name: 'Space Evenly' },
+                { id: 'flex-start', value: 'flex-start', name: 'Start' },
+                { id: 'flex-end', value: 'flex-end', name: 'End' },
+                { id: 'center', value: 'center', name: 'Center' },
+                { id: 'space-between', value: 'space-between', name: 'Space Between' },
+                { id: 'space-around', value: 'space-around', name: 'Space Around' },
+                { id: 'space-evenly', value: 'space-evenly', name: 'Space Evenly' },
               ]},
               { name: 'Align Items', property: 'align-items', type: 'select', defaults: 'stretch', options: [
-                { value: 'flex-start', name: 'Start' },
-                { value: 'flex-end', name: 'End' },
-                { value: 'center', name: 'Center' },
-                { value: 'stretch', name: 'Stretch' },
-                { value: 'baseline', name: 'Baseline' },
+                { id: 'flex-start', value: 'flex-start', name: 'Start' },
+                { id: 'flex-end', value: 'flex-end', name: 'End' },
+                { id: 'center', value: 'center', name: 'Center' },
+                { id: 'stretch', value: 'stretch', name: 'Stretch' },
+                { id: 'baseline', value: 'baseline', name: 'Baseline' },
               ]},
               { name: 'Flex Wrap', property: 'flex-wrap', type: 'select', defaults: 'nowrap', options: [
-                { value: 'nowrap', name: 'No Wrap' },
-                { value: 'wrap', name: 'Wrap' },
-                { value: 'wrap-reverse', name: 'Wrap Reverse' },
+                { id: 'nowrap', value: 'nowrap', name: 'No Wrap' },
+                { id: 'wrap', value: 'wrap', name: 'Wrap' },
+                { id: 'wrap-reverse', value: 'wrap-reverse', name: 'Wrap Reverse' },
               ]},
               { name: 'Gap', property: 'gap' },
               { name: 'Flex', property: 'flex' },
@@ -305,10 +305,10 @@ export default function TemplateEditor({
             open: false,
             properties: [
               { name: 'Position', property: 'position', type: 'select', defaults: 'static', options: [
-                { value: 'static', name: 'Static'  },
-                { value: 'relative', name: 'Relative' },
-                { value: 'absolute', name: 'Absolute' },
-                { value: 'fixed', name: 'Fixed' },
+                { id: 'static', value: 'static', name: 'Static'  },
+                { id: 'relative', value: 'relative', name: 'Relative' },
+                { id: 'absolute', value: 'absolute', name: 'Absolute' },
+                { id: 'fixed', value: 'fixed', name: 'Fixed' },
               ]},
               'top', 'right', 'bottom', 'left', 'z-index'
             ],
@@ -359,8 +359,8 @@ export default function TemplateEditor({
               name: 'data-link-target',
               label: 'Link Açılış',
               options: [
-                { value: '_blank', name: 'Yeni Sekme' },
-                { value: '_self', name: 'Aynı Sayfa' },
+                { id: '_blank', value: '_blank', name: 'Yeni Sekme' },
+                { id: '_self', value: '_self', name: 'Aynı Sayfa' },
               ],
             },
           ],
@@ -387,8 +387,8 @@ export default function TemplateEditor({
               name: 'target',
               label: 'Açılış',
               options: [
-                { value: '_blank', name: 'Yeni Sekme' },
-                { value: '_self', name: 'Aynı Sayfa' },
+                { id: '_blank', value: '_blank', name: 'Yeni Sekme' },
+                { id: '_self', value: '_self', name: 'Aynı Sayfa' },
               ],
             },
           ],
@@ -418,8 +418,8 @@ export default function TemplateEditor({
               name: 'target',
               label: 'Açılış',
               options: [
-                { value: '', name: 'Aynı Sayfa' },
-                { value: '_blank', name: 'Yeni Sekme' },
+                { id: 'self', value: '', name: 'Aynı Sayfa' },
+                { id: '_blank', value: '_blank', name: 'Yeni Sekme' },
               ],
             },
             {

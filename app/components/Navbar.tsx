@@ -27,6 +27,7 @@ export default function Navbar() {
             ? 'bg-[#0a0a14]/90 backdrop-blur-md py-3' 
             : 'bg-transparent py-5'
         }`}
+        
       >
         <div className="max-w-6xl mx-auto px-6">
           <div className="flex items-center justify-between">
@@ -65,6 +66,7 @@ export default function Navbar() {
           </div>
         </div>
       </nav>
+
 
       <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </>
