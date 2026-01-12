@@ -11,6 +11,7 @@ export default function Home() {
       description: "Etkinlik biletleri bir tık uzağında. Konserler, tiyatrolar, festivaller ve daha fazlası.",
       websiteUrl: "https://www.gisekibris.com",
       color: "#e91e63",
+      imageScale: 0.75, // Gişe logosu daha küçük
       socialLinks: {
         instagram: "https://www.instagram.com/gisekibris/",
         facebook: "https://www.facebook.com/gisekibris/",
@@ -21,10 +22,11 @@ export default function Home() {
     },
     {
       title: "",
-      image: "/kuponkıbrıs-logo.png",
+      image: "/kuponkibris-logo.png",
       description: "İndirimler ve fırsatlar bir tık uzağında. En iyi fiyatlarla alışveriş yapın.",
       websiteUrl: "https://www.kuponkibris.com",
       color: "#0d7a3c",
+      imageScale: 0.75, // Kupon logosu normal boyut
       socialLinks: {
         instagram: "https://www.instagram.com/kuponkibris/",
         facebook: "https://www.facebook.com/kuponkibris/",
@@ -97,6 +99,7 @@ export default function Home() {
                   websiteUrl={service.websiteUrl}
                   socialLinks={service.socialLinks}
                   accentColor={service.color}
+                  imageScale={service.imageScale}
                   index={index}
                 />
               ))}

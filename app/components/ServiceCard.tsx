@@ -10,6 +10,7 @@ interface ServiceCardProps {
   websiteUrl?: string;
   accentColor?: string;
   index?: number;
+  imageScale?: number; // Logo boyutu için (varsayılan 1)
   socialLinks?: {
     facebook?: string;
     instagram?: string;
@@ -26,6 +27,7 @@ export default function ServiceCard({
   websiteUrl,
   socialLinks,
   accentColor = "#06b6d4",
+  imageScale = 1,
 }: ServiceCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -71,13 +73,15 @@ export default function ServiceCard({
             style={{ background: '#000000' }}
           >
             {/* App Image */}
-            <div className="relative h-40 mt-14 overflow-hidden pointer-events-none flex items-center justify-center">
+            <div className="relative h-40 w-full mt-14 overflow-hidden pointer-events-none flex items-center justify-center">
               <Image
                 src={image}
                 alt={title}
                 fill
                 className="object-contain p-8 transition-transform duration-700 group-hover:scale-110 brightness-0 invert"
+                style={{ transform: `scale(${imageScale})` }}
               />
+              
               <div className="absolute inset-0 bg-gradient-to-t from-[#000000] via-transparent to-transparent"></div>
             </div>
 
