@@ -6,8 +6,8 @@ import Image from "next/image";
 export default function Home() {
   const services = [
     {
-      title: "GİŞE KIBRIS",
-      image: "/GPW.png",
+      title: "",
+      image: "/gisekibris-logo.png",
       description: "Etkinlik biletleri bir tık uzağında. Konserler, tiyatrolar, festivaller ve daha fazlası.",
       websiteUrl: "https://www.gisekibris.com",
       color: "#e91e63",
@@ -20,11 +20,11 @@ export default function Home() {
       },
     },
     {
-      title: "KUPON KIBRIS",
-      image: "/KKW.png",
+      title: "",
+      image: "/kuponkıbrıs-logo.png",
       description: "İndirimler ve fırsatlar bir tık uzağında. En iyi fiyatlarla alışveriş yapın.",
       websiteUrl: "https://www.kuponkibris.com",
-      color: "#00bcd4",
+      color: "#0d7a3c",
       socialLinks: {
         instagram: "https://www.instagram.com/kuponkibris/",
         facebook: "https://www.facebook.com/kuponkibris/",

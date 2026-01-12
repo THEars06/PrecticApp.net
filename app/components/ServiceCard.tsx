@@ -68,17 +68,17 @@ export default function ServiceCard({
           {/* Phone Screen */}
           <div 
             className="relative w-full h-full rounded-[38px] overflow-hidden"
-            style={{ background: '#0a0a14' }}
+            style={{ background: '#000000' }}
           >
             {/* App Image */}
-            <div className="relative h-48 overflow-hidden pointer-events-none">
+            <div className="relative h-40 mt-14 overflow-hidden pointer-events-none flex items-center justify-center">
               <Image
                 src={image}
                 alt={title}
                 fill
-                className="object-cover transition-transform duration-700 group-hover:scale-110"
+                className="object-contain p-8 transition-transform duration-700 group-hover:scale-110 brightness-0 invert"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a14] via-transparent to-transparent"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-[#000000] via-transparent to-transparent"></div>
             </div>
 
             {/* App Content */}
@@ -90,7 +90,7 @@ export default function ServiceCard({
                 {title}
               </h3>
               
-              <p className="text-white/50 text-xs leading-relaxed mb-4 flex-grow">
+              <p className="text-white/60 text-sm leading-relaxed mb-4 flex-grow">
                 {description}
               </p>
 
