@@ -73,7 +73,7 @@ export default function ServiceCard({
             style={{ background: '#000000' }}
           >
             {/* App Image */}
-            <div className="relative h-40 w-full mt-14 overflow-hidden pointer-events-none flex items-center justify-center">
+            <div className="relative h-40 w-full mt-8 overflow-hidden pointer-events-none flex items-center justify-center">
               <Image
                 src={image}
                 alt={title}
