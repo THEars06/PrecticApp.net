@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 type Template = {
   id: string;
   name: string;
+  subject: string | null;
   description: string | null;
   htmlContent: string;
   cssContent: string | null;
@@ -27,6 +28,7 @@ export default function TemplatesPage() {
   const [codeModal, setCodeModal] = useState(false);
   const [codeName, setCodeName] = useState('');
   const [codeDescription, setCodeDescription] = useState('');
+  const [codeSubject, setCodeSubject] = useState('');
   const [htmlCode, setHtmlCode] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -91,6 +93,7 @@ export default function TemplatesPage() {
         },
         body: JSON.stringify({
           name: codeName,
+          subject: codeSubject || null,
           description: codeDescription || null,
           htmlContent: htmlCode,
           cssContent: null,
@@ -121,8 +124,27 @@ export default function TemplatesPage() {
     setCodeModal(false);
     setCodeName('');
     setCodeDescription('');
+    setCodeSubject('');
     setHtmlCode('');
     setShowPreview(false);
+  };
+
+  const handleClone = async (id: string) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/templates/${id}/clone`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const cloned = await response.json();
+        setTemplates(prev => [cloned, ...prev]);
+      }
+    } catch (error) {
+      console.error('Şablon kopyalanırken hata:', error);
+    }
   };
 
   return (
@@ -210,6 +232,12 @@ export default function TemplatesPage() {
                   >
                     Düzenle
                   </Link>
+                  <button
+                    onClick={() => handleClone(template.id)}
+                    className="px-3 py-1.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    Kopyala
+                  </button>
                   <button
                     onClick={() => setDeleteModal(template.id)}
                     className="px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors"
@@ -316,6 +344,18 @@ export default function TemplatesPage() {
                       />
                     </div>
                     <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Mail Konusu
+                      </label>
+                      <input
+                        type="text"
+                        value={codeSubject}
+                        onChange={(e) => setCodeSubject(e.target.value)}
+                        placeholder="Örn: Kampanya bildirimi"
+                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2b2973]/20 focus:border-[#2b2973] text-black"
+                      />
+                    </div>
+                    <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
                         Açıklama
                       </label>

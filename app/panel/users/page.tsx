@@ -39,12 +39,13 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${API_URL}/users`, {
+      const res = await fetch(`${API_URL}/users?limit=10000`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setUsers(data);
+        // API artık { data: [], total } döndürüyor
+        setUsers(Array.isArray(data) ? data : (data.data ?? []));
       }
     } catch (error) {
       console.error('Users fetch error:', error);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 
 // Mock kampanya verileri (sadece gise için - kupon gerçek API'den gelecek)
@@ -28,6 +28,7 @@ const GISE_KUPON_API_URL = process.env.NEXT_PUBLIC_GISE_KUPON_API_URL || 'http:/
 type MailTemplate = {
   id: string;
   name: string;
+  subject: string | null;
   description: string | null;
   htmlContent: string;
   cssContent: string | null;
@@ -46,11 +47,23 @@ export default function MailPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [draggedCampaign, setDraggedCampaign] = useState<Campaign | null>(null);
-  // Gerçek kullanıcı verileri
-  const [allUsersList, setAllUsersList] = useState<User[]>([]);
+  // Kullanıcı listesi — infinite scroll
+  const [userList, setUserList] = useState<User[]>([]);
+  const [userPage, setUserPage] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const [hasMoreUsers, setHasMoreUsers] = useState(true);
   const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingMoreUsers, setLoadingMoreUsers] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  // Tümünü Ekle modal
+  const [addAllModal, setAddAllModal] = useState(false);
+  const [addAllProgress, setAddAllProgress] = useState(0);
+  const [addAllTotal, setAddAllTotal] = useState(0);
+  const [addAllDone, setAddAllDone] = useState(false);
+  // Scroll ref
+  const userListRef = useRef<HTMLDivElement>(null);
+  const scrollSentinelRef = useRef<HTMLDivElement>(null);
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   // Template verileri
   const [templates, setTemplates] = useState<MailTemplate[]>([]);
@@ -65,28 +78,128 @@ export default function MailPage() {
   // Kampanyadan gelen kullanıcılar
   const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
 
-  // Kullanıcıları ve şablonları API'den çek
-  useEffect(() => {
-    const fetchUsers = async () => {
-      setLoadingUsers(true);
-      try {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/users`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+  // Kullanıcıları çek (arama veya sayfa bazlı)
+  const fetchUsers = useCallback(async (search: string, page: number, append: boolean) => {
+    if (page === 1) setLoadingUsers(true);
+    else setLoadingMoreUsers(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const params = new URLSearchParams({ search, limit: '50', page: String(page) });
+      const response = await fetch(`${API_URL}/users?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const incoming: User[] = data.data ?? [];
+        const total: number = data.total ?? 0;
+        setUserTotal(total);
+        setUserList(prev => {
+          if (!append) return incoming;
+          const seen = new Set(prev.map(u => u.email.toLowerCase()));
+          return [...prev, ...incoming.filter(u => !seen.has(u.email.toLowerCase()))];
         });
-        if (response.ok) {
-          const users = await response.json();
-          setAllUsersList(users);
-        }
-      } catch (error) {
-        console.error('Kullanıcılar yüklenirken hata:', error);
-      } finally {
-        setLoadingUsers(false);
+        setHasMoreUsers(page * 50 < total);
       }
-    };
+    } catch (error) {
+      console.error('Kullanıcılar yüklenirken hata:', error);
+    } finally {
+      setLoadingUsers(false);
+      setLoadingMoreUsers(false);
+    }
+  }, []);
 
+  // İlk yükleme
+  useEffect(() => {
+    fetchUsers('', 1, false);
+  }, [fetchUsers]);
+
+  // Arama debounce — arama değişince sıfırla
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setUserPage(1);
+      fetchUsers(userSearch, 1, false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [userSearch, fetchUsers]);
+
+  // Infinite scroll — sentinel görününce sonraki sayfa
+  useEffect(() => {
+    const sentinel = scrollSentinelRef.current;
+    const container = userListRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMoreUsers && !loadingMoreUsers && !loadingUsers) {
+          const nextPage = userPage + 1;
+          setUserPage(nextPage);
+          fetchUsers(userSearch, nextPage, true);
+        }
+      },
+      { root: container, threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreUsers, loadingMoreUsers, loadingUsers, userPage, userSearch, fetchUsers]);
+
+  // Tümünü Ekle — 100'er 100'er tüm DB'yi çekip ekle
+  const handleAddAll = async () => {
+    setAddAllModal(true);
+    setAddAllProgress(0);
+    setAddAllDone(false);
+    const token = localStorage.getItem('accessToken');
+
+    // ─── Ayarlar (buradan değiştirebilirsin) ────────────────
+    const BATCH = 5000;     // her istekte çekilecek kullanıcı sayısı
+    const CONCURRENCY = 5;   // aynı anda gönderilecek paralel istek sayısı
+    // ────────────────────────────────────────────────────────
+
+    // 1) Toplam sayıyı öğren
+    const firstRes = await fetch(
+      `${API_URL}/users?search=${encodeURIComponent(userSearch)}&limit=1&page=1`,
+      { headers: { 'Authorization': `Bearer ${token}` } },
+    );
+    if (!firstRes.ok) { setAddAllModal(false); return; }
+    const firstData = await firstRes.json();
+    const total: number = firstData.total ?? 0;
+    setAddAllTotal(total);
+
+    const totalPages = Math.ceil(total / BATCH);
+    const allCollected: User[] = [];
+
+    // 2) Tüm sayfaları çek — CONCURRENCY kadar paralel, state'e DOKUNMA
+    for (let start = 1; start <= totalPages; start += CONCURRENCY) {
+      const pageGroup = Array.from(
+        { length: Math.min(CONCURRENCY, totalPages - start + 1) },
+        (_, i) => start + i,
+      );
+
+      const results = await Promise.all(
+        pageGroup.map(p =>
+          fetch(`${API_URL}/users?search=${encodeURIComponent(userSearch)}&limit=${BATCH}&page=${p}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          }).then(r => r.ok ? r.json() : null),
+        ),
+      );
+
+      for (const d of results) {
+        if (d?.data) allCollected.push(...d.data);
+      }
+
+      // Sadece progress bar güncelle, re-render yok
+      setAddAllProgress(allCollected.length);
+    }
+
+    // 3) TEK seferde state'e yaz — email bazlı deduplicate
+    setSelectedUsers(prev => {
+      const seen = new Set(prev.map(u => u.email.toLowerCase()));
+      const unique = allCollected.filter(u => !seen.has(u.email.toLowerCase()));
+      return [...prev, ...unique];
+    });
+    setAddAllDone(true);
+  };
+
+  // Şablonları ve provider'ları çek
+  useEffect(() => {
     const fetchTemplates = async () => {
       setLoadingTemplates(true);
       try {
@@ -129,7 +242,6 @@ export default function MailPage() {
       }
     };
 
-    fetchUsers();
     fetchTemplates();
     fetchProviders();
   }, []);
@@ -151,8 +263,8 @@ export default function MailPage() {
             }));
             setKuponCampaigns(formattedCampaigns);
           }
-        } catch (error) {
-          console.error('Kupon kampanyaları yüklenirken hata:', error);
+        } catch {
+          // Kupon API çalışmıyor olabilir, sessizce geç
         } finally {
           setLoadingCampaigns(false);
         }
@@ -201,14 +313,10 @@ export default function MailPage() {
       c.name.toLowerCase().includes(campaignSearch.toLowerCase())
     );
 
-  // Email bazlı duplicate kontrolü - aynı email bir daha eklenemesin
+  // Email bazlı duplicate kontrolü
   const selectedEmails = selectedUsers.map(u => u.email.toLowerCase());
-  const filteredUsers = allUsersList.filter(
+  const filteredUsers = userList.filter(
     (u) => !selectedEmails.includes(u.email.toLowerCase())
-  ).filter(
-    (u) => userSearch === '' || 
-      u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-      (u.fullName && u.fullName.toLowerCase().includes(userSearch.toLowerCase()))
   );
   const totalUsers = selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
 
@@ -306,6 +414,59 @@ export default function MailPage() {
 
   return (
     <div className="space-y-6">
+
+      {/* ─── Tümünü Ekle Modal ─── */}
+      {addAllModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+            <div className="flex flex-col items-center gap-4">
+              {!addAllDone ? (
+                <>
+                  <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
+                    <svg className="animate-spin h-7 w-7 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Kullanıcılar Ekleniyor</h3>
+                  <p className="text-sm text-gray-500 text-center">
+                    {addAllProgress.toLocaleString()} / {addAllTotal.toLocaleString()} kullanıcı eklendi
+                  </p>
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: addAllTotal > 0 ? `${Math.min((addAllProgress / addAllTotal) * 100, 100)}%` : '0%' }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    %{addAllTotal > 0 ? Math.round((addAllProgress / addAllTotal) * 100) : 0} tamamlandı
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Tamamlandı!</h3>
+                  <p className="text-sm text-gray-500 text-center">
+                    <span className="font-semibold text-gray-700">{addAllProgress.toLocaleString()}</span> kullanıcı başarıyla eklendi.
+                  </p>
+                  <button
+                    onClick={() => setAddAllModal(false)}
+                    className="mt-2 px-6 py-2.5 bg-[#2b2973] text-white rounded-xl font-medium hover:bg-[#1e1f5e] transition-colors"
+                  >
+                    Kapat
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -554,7 +715,7 @@ export default function MailPage() {
                             <p className="text-xs text-blue-600 font-medium mb-2">Seçilen Kullanıcılar ({selectedUsers.length})</p>
                             {selectedUsers.map((user) => (
                               <div
-                                key={user.id}
+                                key={user.email}
                                 className="bg-blue-50 p-2 rounded-lg border border-blue-200 flex items-center gap-2 mb-1 group"
                               >
                                 <div className="w-6 h-6 rounded-full bg-[#2b2973] flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
@@ -604,24 +765,19 @@ export default function MailPage() {
                {/* Tüm Kullanıcılar Bölümü */}
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mt-4">
                     <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    Tüm Kullanıcılar ({allUsersList.length})
-                    {loadingUsers && (
+                    Kullanıcılar
+                    {(loadingUsers) && (
                       <span className="ml-2 text-xs text-gray-400">Yükleniyor...</span>
                     )}
-                    {filteredUsers.length > 0 && (
-                      <button
-                        onClick={() => {
-                          // Email duplicate kontrolü ile ekle
-                          const newUsers = filteredUsers.filter(
-                            u => !selectedEmails.includes(u.email.toLowerCase())
-                          );
-                          setSelectedUsers([...selectedUsers, ...newUsers]);
-                        }}
-                        className="ml-auto text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        Tümünü Ekle
-                      </button>
+                    {userTotal > 0 && (
+                      <span className="ml-2 text-xs text-gray-400">{userTotal.toLocaleString()} kullanıcı</span>
                     )}
+                    <button
+                      onClick={handleAddAll}
+                      className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                    >
+                      Tümünü Ekle
+                    </button>
                   </h3>
                   
                   {/* Arama Kutusu */}
@@ -648,7 +804,7 @@ export default function MailPage() {
                     )}
                   </div>
 
-                  <div className="bg-blue-50 rounded-xl p-3 min-h-[350px] max-h-[350px] overflow-y-auto">
+                  <div ref={userListRef} className="bg-blue-50 rounded-xl p-3 min-h-[350px] max-h-[350px] overflow-y-auto">
                     {loadingUsers ? (
                       <div className="flex items-center justify-center py-8">
                         <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -656,7 +812,7 @@ export default function MailPage() {
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                       </div>
-                    ) : filteredUsers.length === 0 ? (
+                    ) : filteredUsers.length === 0 && !loadingUsers ? (
                       <div className="text-center text-gray-400 text-sm py-8">
                         {userSearch ? 'Aramanızla eşleşen kullanıcı bulunamadı' : 'Tüm kullanıcılar seçildi'}
                       </div>
@@ -664,9 +820,8 @@ export default function MailPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {filteredUsers.map((user) => (
                           <button
-                            key={user.id}
+                            key={user.email}
                             onClick={() => {
-                              // Email duplicate kontrolü
                               if (!selectedEmails.includes(user.email.toLowerCase())) {
                                 setSelectedUsers([...selectedUsers, user]);
                               }
@@ -685,6 +840,19 @@ export default function MailPage() {
                             </svg>
                           </button>
                         ))}
+                        {/* Infinite scroll sentinel */}
+                        <div ref={scrollSentinelRef} className="col-span-full h-4" />
+                        {loadingMoreUsers && (
+                          <div className="col-span-full flex justify-center py-3">
+                            <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                            </svg>
+                          </div>
+                        )}
+                        {!hasMoreUsers && filteredUsers.length > 0 && (
+                          <p className="col-span-full text-center text-xs text-gray-400 py-2">Tüm kullanıcılar yüklendi</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -699,13 +867,28 @@ export default function MailPage() {
               
               {/* Konu Alanı */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Mail Konusu</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Mail Konusu</label>
+                  {templates.find(t => t.id === selectedTemplate)?.subject && (
+                    <span className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Şablondan geliyor
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
+                  readOnly={!!templates.find(t => t.id === selectedTemplate)?.subject}
                   placeholder="Mail konusunu yazın..."
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900"
+                  className={`w-full px-4 py-3 border rounded-xl transition-all text-gray-900 ${
+                    templates.find(t => t.id === selectedTemplate)?.subject
+                      ? 'border-purple-200 bg-purple-50 cursor-not-allowed text-purple-800 focus:outline-none'
+                      : 'border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500'
+                  }`}
                 />
               </div>
               
@@ -731,7 +914,10 @@ export default function MailPage() {
                   templates.map((template) => (
                     <div key={template.id} className="relative">
                       <button
-                        onClick={() => setSelectedTemplate(template.id)}
+                        onClick={() => {
+                          setSelectedTemplate(template.id);
+                          setSubject(template.subject || '');
+                        }}
                         className={`w-full relative p-4 rounded-xl border-2 transition-all text-left ${
                           selectedTemplate === template.id
                             ? 'border-purple-500 bg-purple-50'
@@ -881,6 +1067,8 @@ export default function MailPage() {
                     <button
                       onClick={() => {
                         setSelectedTemplate(previewTemplate);
+                        const tpl = templates.find(t => t.id === previewTemplate);
+                        setSubject(tpl?.subject || '');
                         setPreviewTemplate(null);
                       }}
                       className="px-4 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 transition-colors"

@@ -16,6 +16,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 type Template = {
   id: string;
   name: string;
+  subject: string | null;
   description: string | null;
   htmlContent: string;
   cssContent: string | null;
@@ -27,6 +28,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   const router = useRouter();
   const [template, setTemplate] = useState<Template | null>(null);
   const [name, setName] = useState('');
+  const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
           const data = await response.json();
           setTemplate(data);
           setName(data.name);
+          setSubject(data.subject || '');
           setDescription(data.description || '');
         } else {
           router.push('/panel/templates');
@@ -72,6 +75,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
         },
         body: JSON.stringify({
           name,
+          subject: subject || null,
           description,
           htmlContent: data.html,
           cssContent: data.css,
@@ -107,7 +111,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, subject: subject || null, description }),
       });
       setEditingInfo(false);
     } catch (error) {
@@ -145,12 +149,22 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
           </Link>
           {editingInfo ? (
             <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="px-3 py-1.5 border border-gray-200 rounded-lg text-lg font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-              />
+              <div className="flex flex-col gap-1.5">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Şablon adı"
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-base font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                />
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Mail konusu (örn: Kampanya bildirimi)"
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 text-gray-700"
+                />
+              </div>
               <button
                 onClick={handleInfoSave}
                 className="p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600"
@@ -162,6 +176,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
               <button
                 onClick={() => {
                   setName(template.name);
+                  setSubject(template.subject || '');
                   setDescription(template.description || '');
                   setEditingInfo(false);
                 }}

@@ -16,6 +16,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 export default function NewTemplatePage() {
   const router = useRouter();
   const [name, setName] = useState('');
+  const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
@@ -37,6 +38,7 @@ export default function NewTemplatePage() {
         },
         body: JSON.stringify({
           name,
+          subject: subject || null,
           description,
           htmlContent: data.html,
           cssContent: data.css,
@@ -87,6 +89,16 @@ export default function NewTemplatePage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Örn: Yılbaşı Kampanyası"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mail Konusu</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                placeholder="Örn: Harika kampanya fırsatları!"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900"
               />
             </div>
