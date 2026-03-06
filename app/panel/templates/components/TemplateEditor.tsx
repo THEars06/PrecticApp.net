@@ -128,7 +128,8 @@ export default function TemplateEditor({
               if (!res.ok) continue;
               const data = await res.json();
               if (data.url) {
-                gjs.AssetManager.add({ src: data.url, type: 'image', name: (f as File).name });
+                const imgUrl = data.url.startsWith('http') ? data.url : `${API_URL}${data.url.startsWith('/') ? '' : '/'}${data.url}`;
+                gjs.AssetManager.add({ src: imgUrl, type: 'image', name: (f as File).name });
               }
             } catch (err) {
               console.error('Görsel yükleme hatası:', err);

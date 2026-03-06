@@ -65,7 +65,9 @@ export default function ImageCropModal({ file, onComplete, onClose }: Props) {
     });
     if (!res.ok) throw new Error('Yükleme başarısız');
     const data = await res.json();
-    return data.url as string;
+    const rawUrl = data.url as string;
+    return rawUrl.startsWith('http') ? rawUrl : `${API_URL}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+
   }, []);
 
   const handleCropAndUpload = async () => {
