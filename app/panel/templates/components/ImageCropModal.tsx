@@ -5,6 +5,7 @@ import ReactCrop, { Crop, PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+const UPLOAD_BASE = process.env.NEXT_PUBLIC_UPLOAD_BASE_URL || API_URL;
 
 interface Props {
   file: File;
@@ -66,7 +67,9 @@ export default function ImageCropModal({ file, onComplete, onClose }: Props) {
     if (!res.ok) throw new Error('Yükleme başarısız');
     const data = await res.json();
     const rawUrl = data.url as string;
-    return rawUrl.startsWith('http') ? rawUrl : `${API_URL}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+
+    
+    return rawUrl.startsWith('http') ? rawUrl : `${UPLOAD_BASE}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
 
   }, []);
 

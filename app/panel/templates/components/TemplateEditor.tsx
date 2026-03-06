@@ -22,6 +22,7 @@ import {
 } from './registerEditorComponents';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+const UPLOAD_BASE = process.env.NEXT_PUBLIC_UPLOAD_BASE_URL || API_URL;
 const GRID = 5;
 
 const snap = (val: string): string => {
@@ -128,7 +129,7 @@ export default function TemplateEditor({
               if (!res.ok) continue;
               const data = await res.json();
               if (data.url) {
-                const imgUrl = data.url.startsWith('http') ? data.url : `${API_URL}${data.url.startsWith('/') ? '' : '/'}${data.url}`;
+                const imgUrl = data.url.startsWith('http') ? data.url : `${UPLOAD_BASE}${data.url.startsWith('/') ? '' : '/'}${data.url}`;
                 gjs.AssetManager.add({ src: imgUrl, type: 'image', name: (f as File).name });
               }
             } catch (err) {
