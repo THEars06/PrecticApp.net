@@ -78,7 +78,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
           subject: subject || null,
           description,
           htmlContent: data.html,
-          cssContent: data.css,
+          cssContent: null,
           gjsData: data.gjsData,
         }),
       });

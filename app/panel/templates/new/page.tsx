@@ -41,7 +41,7 @@ export default function NewTemplatePage() {
           subject: subject || null,
           description,
           htmlContent: data.html,
-          cssContent: data.css,
+          cssContent: null,
           gjsData: data.gjsData,
         }),
       });
@@ -113,6 +113,7 @@ export default function NewTemplatePage() {
               />
             </div>
             <button
+
               onClick={() => setShowEditor(true)}
               disabled={!name.trim()}
               className={`w-full flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium rounded-xl transition-all ${

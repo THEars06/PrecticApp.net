@@ -1,9 +1,34 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import grapesjs, { Editor } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 import './grapesjs-theme.css';
+import ImageCropModal from './ImageCropModal';
+import EditorToolbar from './EditorToolbar';
+import SpacingPanel, { type SpacingInfo } from './SpacingPanel';
+import { editorBlocks } from './editorBlocks';
+import { editorStyleSectors } from './editorStyleSectors';
+import { editorCanvasCss } from './editorCanvasCss';
+import { inlineCssIntoHtml } from './emailUtils';
+import {
+  registerSpacingSliderTrait,
+  registerImageComponent,
+  registerTableComponents,
+  registerLinkComponents,
+  registerRteActions,
+  getResolvedStyle,
+  migrateCssRulesToInline,
+} from './registerEditorComponents';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+const GRID = 5;
+
+const snap = (val: string): string => {
+  const n = parseFloat(val);
+  if (isNaN(n)) return val;
+  return `${Math.round(n / GRID) * GRID}px`;
+};
 
 interface TemplateEditorProps {
   initialHtml?: string;
@@ -12,6 +37,8 @@ interface TemplateEditorProps {
   onSave: (data: { html: string; css: string; gjsData: any }) => void;
   saving?: boolean;
 }
+
+type RightTab = 'styles' | 'layers' | 'traits';
 
 export default function TemplateEditor({
   initialHtml = '',
@@ -22,8 +49,53 @@ export default function TemplateEditor({
 }: TemplateEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [activeTab, setActiveTab] = useState<'styles' | 'layers'>('styles');
+  const [activeTab, setActiveTab] = useState<RightTab>('styles');
+  const [blockSearch, setBlockSearch] = useState('');
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const cropTargetRef = useRef<any>(null);
+  const [activeDevice, setActiveDevice] = useState<'Desktop' | 'Tablet' | 'Mobile'>('Desktop');
+  const [showGrid, setShowGrid] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [spacingInfo, setSpacingInfo] = useState<SpacingInfo | null>(null);
+  const selectedCompRef = useRef<any>(null);
 
+  // Block search filter
+  useEffect(() => {
+    if (!editor) return;
+    const allBlocks = editor.BlockManager.getAll();
+    allBlocks.forEach((block: any) => {
+      const el = block.view?.el as HTMLElement | undefined;
+      if (!el) return;
+      const label = (block.getLabel?.() || '').toLowerCase().replace(/<[^>]*>/g, '');
+      const cat = String(block.get?.('category') || '').toLowerCase();
+      const q = blockSearch.toLowerCase();
+      const matches = !q || label.includes(q) || cat.includes(q);
+      el.style.display = matches ? '' : 'none';
+    });
+  }, [blockSearch, editor]);
+
+  // Grid toggle
+  useEffect(() => {
+    if (!editor) return;
+    const canvas = editor.Canvas;
+    const frame = canvas.getFrames()[0];
+    if (!frame) return;
+    try {
+      const doc = (frame as any).view?.getBody?.()?.ownerDocument;
+      if (!doc) return;
+      const htmlEl = doc.documentElement;
+      if (showGrid) {
+        htmlEl.style.backgroundImage =
+          'linear-gradient(rgba(99,102,241,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.07) 1px, transparent 1px)';
+        htmlEl.style.backgroundSize = '5px 5px';
+      } else {
+        htmlEl.style.backgroundImage = '';
+        htmlEl.style.backgroundSize = '';
+      }
+    } catch {}
+  }, [showGrid, editor]);
+
+  // ── GrapesJS init ──
   useEffect(() => {
     if (!editorRef.current) return;
 
@@ -32,38 +104,36 @@ export default function TemplateEditor({
       height: '100%',
       width: 'auto',
       storageManager: false,
+      avoidInlineStyle: false,
       panels: { defaults: [] },
-      canvasCss: `
-        * { box-sizing: border-box; }
-        body { margin: 0; }
-      `,
+      canvasCss: editorCanvasCss,
       assetManager: {
-        embedAsBase64: true,
+        embedAsBase64: false,
         upload: false,
         dropzone: true,
         uploadFile: async (e: any) => {
-          const files = e.dataTransfer ? e.dataTransfer.files : e.target.files;
-          
-          Array.from(files as FileList).forEach((file: any) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const base64 = reader.result as string;
-              gjs.AssetManager.add({
-                src: base64,
-                type: 'image',
-                name: file.name,
+          const files: FileList = e.dataTransfer ? e.dataTransfer.files : e.target?.files;
+          if (!files?.length) return;
+          const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+
+          for (const f of Array.from(files as FileList)) {
+            const formData = new FormData();
+            formData.append('file', f as Blob);
+            try {
+              const res = await fetch(`${API_URL}/upload/image`, {
+                method: 'POST',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                body: formData,
               });
-              const assetManager = gjs.AssetManager;
-              const assets = assetManager.getAll();
-              if (assets.length > 0) {
-                const lastAsset = assets.at(-1);
-                if (lastAsset) {
-                  assetManager.close();
-                }
+              if (!res.ok) continue;
+              const data = await res.json();
+              if (data.url) {
+                gjs.AssetManager.add({ src: data.url, type: 'image', name: (f as File).name });
               }
-            };
-            reader.readAsDataURL(file);
-          });
+            } catch (err) {
+              console.error('Görsel yükleme hatası:', err);
+            }
+          }
         },
       },
       deviceManager: {
@@ -75,521 +145,503 @@ export default function TemplateEditor({
       },
       blockManager: {
         appendTo: '#blocks',
-        blocks: [
-          {
-            id: 'section',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Bölüm</div>',
-            category: 'Temel',
-            content: '<section style="padding: 50px 20px; min-height: 100px;"><h2>Başlık</h2><p>İçerik buraya gelecek...</p></section>',
-          },
-          {
-            id: 'text',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><div class="gjs-block-label">Metin</div>',
-            category: 'Temel',
-            content: '<p style="padding: 10px;">Metin içeriği buraya yazın...</p>',
-          },
-          {
-            id: 'heading',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><text x="4" y="18" font-size="16" font-weight="bold" fill="currentColor">H</text></svg><div class="gjs-block-label">Başlık</div>',
-            category: 'Temel',
-            content: '<h1 style="padding: 10px; font-size: 28px; font-weight: bold;">Başlık</h1>',
-          },
-          {
-            id: 'image',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="1.5" fill="none"/></svg><div class="gjs-block-label">Görsel</div>',
-            category: 'Temel',
-            content: { type: 'image' },
-          },
-          {
-            id: 'link-image',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.5" fill="none"/></svg><div class="gjs-block-label">Linkli Görsel</div>',
-            category: 'Temel',
-            content: { type: 'link-image' },
-          },
-          {
-            id: 'button',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Buton</div>',
-            category: 'Temel',
-            content: '<a href="#" style="display: inline-block; padding: 12px 24px; background: #2b2973; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">Tıkla</a>',
-          },
-          {
-            id: 'divider',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Ayırıcı</div>',
-            category: 'Temel',
-            content: '<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />',
-          },
-          {
-            id: 'link',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="1.5" fill="none"/></svg><div class="gjs-block-label">Link</div>',
-            category: 'Temel',
-            content: '<a href="#" style="color: #2b2973; text-decoration: underline;">Buraya tıklayın</a>',
-          },
-          // DÜZEN BLOKLARI
-          {
-            id: 'flex-row',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="2" y="6" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="6" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="16" y="6" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Flex Row</div>',
-            category: 'Düzen',
-            content: '<div style="display: flex; flex-direction: row; gap: 10px; padding: 10px;"><div style="flex: 1; padding: 20px; background: #f3f4f6; min-height: 50px;">1</div><div style="flex: 1; padding: 20px; background: #f3f4f6; min-height: 50px;">2</div></div>',
-          },
-          {
-            id: 'flex-column',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="4" y="9" width="16" height="6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="4" y="16" width="16" height="6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Flex Column</div>',
-            category: 'Düzen',
-            content: '<div style="display: flex; flex-direction: column; gap: 10px; padding: 10px;"><div style="padding: 20px; background: #f3f4f6;">Satır 1</div><div style="padding: 20px; background: #f3f4f6;">Satır 2</div></div>',
-          },
-          {
-            id: 'grid-2',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="3" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="13" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="13" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Grid 2x2</div>',
-            category: 'Düzen',
-            content: '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 10px;"><div style="padding: 20px; background: #f3f4f6; text-align: center;">1</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">2</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">3</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">4</div></div>',
-          },
-          {
-            id: 'grid-3',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="2" y="3" width="6" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="3" width="6" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="16" y="3" width="6" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="13" width="6" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="13" width="6" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="16" y="13" width="6" height="8" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Grid 3x2</div>',
-            category: 'Düzen',
-            content: '<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding: 10px;"><div style="padding: 20px; background: #f3f4f6; text-align: center;">1</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">2</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">3</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">4</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">5</div><div style="padding: 20px; background: #f3f4f6; text-align: center;">6</div></div>',
-          },
-          {
-            id: 'grid-4',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="2" y="3" width="4" height="8" fill="none" stroke="currentColor" stroke-width="1"/><rect x="7" y="3" width="4" height="8" fill="none" stroke="currentColor" stroke-width="1"/><rect x="12" y="3" width="4" height="8" fill="none" stroke="currentColor" stroke-width="1"/><rect x="17" y="3" width="4" height="8" fill="none" stroke="currentColor" stroke-width="1"/></svg><div class="gjs-block-label">Grid 4 Sütun</div>',
-            category: 'Düzen',
-            content: '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 10px;"><div style="padding: 15px; background: #f3f4f6; text-align: center;">1</div><div style="padding: 15px; background: #f3f4f6; text-align: center;">2</div><div style="padding: 15px; background: #f3f4f6; text-align: center;">3</div><div style="padding: 15px; background: #f3f4f6; text-align: center;">4</div></div>',
-          },
-          {
-            id: 'two-columns',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="3" width="8" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">2 Sütun</div>',
-            category: 'Düzen',
-            content: '<div style="display: flex; gap: 20px;"><div style="flex: 1; padding: 20px; background: #f9fafb;">Sol Sütun</div><div style="flex: 1; padding: 20px; background: #f9fafb;">Sağ Sütun</div></div>',
-          },
-          {
-            id: 'three-columns',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="2" y="3" width="6" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="3" width="6" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="16" y="3" width="6" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">3 Sütun</div>',
-            category: 'Düzen',
-            content: '<div style="display: flex; gap: 20px;"><div style="flex: 1; padding: 20px; background: #f9fafb;">1</div><div style="flex: 1; padding: 20px; background: #f9fafb;">2</div><div style="flex: 1; padding: 20px; background: #f9fafb;">3</div></div>',
-          },
-          {
-            id: 'sidebar-layout',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="10" y="3" width="11" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Sidebar</div>',
-            category: 'Düzen',
-            content: '<div style="display: flex; gap: 20px;"><div style="width: 200px; padding: 20px; background: #f3f4f6;">Sidebar</div><div style="flex: 1; padding: 20px; background: #f9fafb;">Ana İçerik</div></div>',
-          },
-          {
-            id: 'container',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 2"/></svg><div class="gjs-block-label">Container</div>',
-            category: 'Düzen',
-            content: '<div style="max-width: 1200px; margin: 0 auto; padding: 20px;"></div>',
-          },
-          // MAIL BLOKLARI
-          {
-            id: 'promo-banner',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 8v4M12 14h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><div class="gjs-block-label">Promosyon</div>',
-            category: 'Mail',
-            content: `<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center; border-radius: 12px;">
-              <h2 style="color: white; font-size: 28px; margin-bottom: 10px;">Özel Kampanya!</h2>
-              <p style="color: rgba(255,255,255,0.9); font-size: 16px; margin-bottom: 20px;">Bu fırsatı kaçırmayın</p>
-              <a href="#" style="display: inline-block; padding: 14px 32px; background: white; color: #764ba2; text-decoration: none; border-radius: 8px; font-weight: 600;">İncele</a>
-            </div>`,
-          },
-          {
-            id: 'hero-section',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="10" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="6" y1="18" x2="18" y2="18" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Hero</div>',
-            category: 'Mail',
-            content: `<div style="background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); padding: 60px 20px; text-align: center;">
-              <img src="https://via.placeholder.com/150" alt="Logo" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 20px;"/>
-              <h1 style="color: white; font-size: 36px; margin-bottom: 15px;">Hoş Geldiniz!</h1>
-              <p style="color: rgba(255,255,255,0.8); font-size: 18px; max-width: 500px; margin: 0 auto 25px;">En iyi deneyimi yaşamak için hemen keşfedin</p>
-              <a href="#" style="display: inline-block; padding: 16px 40px; background: #e94560; color: white; text-decoration: none; border-radius: 30px; font-weight: 600; font-size: 16px;">Başlayın</a>
-            </div>`,
-          },
-          {
-            id: 'product-card',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="14" height="8" fill="none" stroke="currentColor" stroke-width="1"/><line x1="5" y1="16" x2="19" y2="16" stroke="currentColor" stroke-width="1"/><line x1="5" y1="19" x2="12" y2="19" stroke="currentColor" stroke-width="1"/></svg><div class="gjs-block-label">Ürün Kartı</div>',
-            category: 'Mail',
-            content: `<div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 300px;">
-              <a href="#" style="display: block;"><img src="https://via.placeholder.com/300x200" alt="Ürün" style="width: 100%; height: auto; display: block;"/></a>
-              <div style="padding: 20px;">
-                <h3 style="font-size: 18px; margin-bottom: 8px; color: #333;">Ürün Adı</h3>
-                <p style="color: #666; font-size: 14px; margin-bottom: 15px;">Kısa açıklama metni</p>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 20px; font-weight: bold; color: #2b2973;">₺199</span>
-                  <a href="#" style="padding: 10px 20px; background: #2b2973; color: white; text-decoration: none; border-radius: 6px; font-size: 14px;">Satın Al</a>
-                </div>
-              </div>
-            </div>`,
-          },
-          {
-            id: 'footer',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><rect x="3" y="15" width="18" height="6" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="1"/></svg><div class="gjs-block-label">Footer</div>',
-            category: 'Mail',
-            content: `<footer style="background: #f9fafb; padding: 30px 20px; text-align: center; border-top: 1px solid #e5e7eb;">
-              <p style="color: #6b7280; font-size: 14px; margin-bottom: 10px;">© 2024 Şirket Adı. Tüm hakları saklıdır.</p>
-              <p style="color: #9ca3af; font-size: 12px;">Bu e-postayı almak istemiyorsanız <a href="#" style="color: #6b7280;">abonelikten çıkın</a>.</p>
-            </footer>`,
-          },
-          {
-            id: 'social-icons',
-            label: '<svg class="w-8 h-8" viewBox="0 0 24 24"><circle cx="6" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="18" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Sosyal</div>',
-            category: 'Mail',
-            content: `<div style="text-align: center; padding: 20px;">
-              <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #1877f2; border-radius: 50%; margin: 0 5px; line-height: 40px; color: white; text-decoration: none;">f</a>
-              <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #1da1f2; border-radius: 50%; margin: 0 5px; line-height: 40px; color: white; text-decoration: none;">t</a>
-              <a href="#" style="display: inline-block; width: 40px; height: 40px; background: #e4405f; border-radius: 50%; margin: 0 5px; line-height: 40px; color: white; text-decoration: none;">i</a>
-            </div>`,
-          },
-        ],
+        blocks: editorBlocks,
       },
       styleManager: {
         appendTo: '#styles',
-        sectors: [
-          {
-            name: 'Boyut',
-            open: true,
-            properties: ['width', 'height', 'max-width', 'min-width', 'min-height', 'max-height', 'margin', 'padding'],
-          },
-          {
-            name: 'Flex / Grid',
-            open: false,
-            properties: [
-              { name: 'Display', property: 'display', type: 'select', defaults: 'block', options: [
-                { id: 'block', value: 'block', name: 'Block' },
-                { id: 'inline-block', value: 'inline-block', name: 'Inline Block' },
-                { id: 'flex', value: 'flex', name: 'Flex' },
-                { id: 'grid', value: 'grid', name: 'Grid' },
-                { id: 'inline-flex', value: 'inline-flex', name: 'Inline Flex' },
-                { id: 'none', value: 'none', name: 'None' },
-              ]},
-              { name: 'Flex Direction', property: 'flex-direction', type: 'select', defaults: 'row', options: [
-                { id: 'row', value: 'row', name: 'Row →' },
-                { id: 'row-reverse', value: 'row-reverse', name: 'Row Reverse ←' },
-                { id: 'column', value: 'column', name: 'Column ↓' },
-                { id: 'column-reverse', value: 'column-reverse', name: 'Column Reverse ↑' },
-              ]},
-              { name: 'Justify Content', property: 'justify-content', type: 'select', defaults: 'flex-start', options: [
-                { id: 'flex-start', value: 'flex-start', name: 'Start' },
-                { id: 'flex-end', value: 'flex-end', name: 'End' },
-                { id: 'center', value: 'center', name: 'Center' },
-                { id: 'space-between', value: 'space-between', name: 'Space Between' },
-                { id: 'space-around', value: 'space-around', name: 'Space Around' },
-                { id: 'space-evenly', value: 'space-evenly', name: 'Space Evenly' },
-              ]},
-              { name: 'Align Items', property: 'align-items', type: 'select', defaults: 'stretch', options: [
-                { id: 'flex-start', value: 'flex-start', name: 'Start' },
-                { id: 'flex-end', value: 'flex-end', name: 'End' },
-                { id: 'center', value: 'center', name: 'Center' },
-                { id: 'stretch', value: 'stretch', name: 'Stretch' },
-                { id: 'baseline', value: 'baseline', name: 'Baseline' },
-              ]},
-              { name: 'Flex Wrap', property: 'flex-wrap', type: 'select', defaults: 'nowrap', options: [
-                { id: 'nowrap', value: 'nowrap', name: 'No Wrap' },
-                { id: 'wrap', value: 'wrap', name: 'Wrap' },
-                { id: 'wrap-reverse', value: 'wrap-reverse', name: 'Wrap Reverse' },
-              ]},
-              { name: 'Gap', property: 'gap' },
-              { name: 'Flex', property: 'flex' },
-              { name: 'Grid Columns', property: 'grid-template-columns' },
-              { name: 'Grid Rows', property: 'grid-template-rows' },
-            ],
-          },
-          {
-            name: 'Tipografi',
-            open: false,
-            properties: ['font-family', 'font-size', 'font-weight', 'letter-spacing', 'color', 'line-height', 'text-align', 'text-decoration'],
-          },
-          {
-            name: 'Dekorasyon',
-            open: false,
-            properties: ['background-color', 'background', 'background-image', 'border-radius', 'border', 'box-shadow'],
-          },
-          {
-            name: 'Konum',
-            open: false,
-            properties: [
-              { name: 'Position', property: 'position', type: 'select', defaults: 'static', options: [
-                { id: 'static', value: 'static', name: 'Static'  },
-                { id: 'relative', value: 'relative', name: 'Relative' },
-                { id: 'absolute', value: 'absolute', name: 'Absolute' },
-                { id: 'fixed', value: 'fixed', name: 'Fixed' },
-              ]},
-              'top', 'right', 'bottom', 'left', 'z-index'
-            ],
-          },
-          {
-            name: 'Ekstra',
-            open: false,
-            properties: ['opacity', 'overflow', 'cursor', 'transition'],
-          },
-        ],
+        sectors: editorStyleSectors,
       },
-      layerManager: {
-        appendTo: '#layers',
-      },
-      traitManager: {
-        appendTo: '#traits',
-      },
+      layerManager: { appendTo: '#layers' },
+      traitManager: { appendTo: '#traits' },
     });
 
-    // Image component'e link trait'i ekle
-    gjs.DomComponents.addType('image', {
-      model: {
-        defaults: {
-          traits: [
-            {
-              type: 'text',
-              name: 'src',
-              label: 'Görsel URL',
-            },
-            {
-              type: 'text',
-              name: 'alt',
-              label: 'Alt Metin',
-            },
-            {
-              type: 'text',
-              name: 'title',
-              label: 'Başlık',
-            },
-            {
-              type: 'text',
-              name: 'data-link',
-              label: 'Link URL (Tıklanabilir)',
-              placeholder: 'https://example.com',
-            },
-            {
-              type: 'select',
-              name: 'data-link-target',
-              label: 'Link Açılış',
-              options: [
-                { id: '_blank', value: '_blank', name: 'Yeni Sekme' },
-                { id: '_self', value: '_self', name: 'Aynı Sayfa' },
-              ],
-            },
-          ],
-        },
-      },
+    // ── Register custom traits & components ──
+    registerSpacingSliderTrait(gjs);
+    registerImageComponent(gjs, setCropFile, cropTargetRef);
+    registerTableComponents(gjs);
+    registerLinkComponents(gjs);
+    registerRteActions(gjs);
+
+    // ── Renk paleti (sp-container) viewport dışına çıkmasın ──
+    const repositionColorPicker = () => {
+      const containers = document.querySelectorAll('.sp-container:not(.sp-hidden)');
+      containers.forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        const rect = htmlEl.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 10) {
+          const overflow = rect.bottom - window.innerHeight + 16;
+          htmlEl.style.top = `${parseInt(htmlEl.style.top || '0') - overflow}px`;
+        }
+        if (rect.top < 10) {
+          htmlEl.style.top = '10px';
+        }
+        if (rect.right > window.innerWidth - 10) {
+          const overflow = rect.right - window.innerWidth + 16;
+          htmlEl.style.left = `${parseInt(htmlEl.style.left || '0') - overflow}px`;
+        }
+        if (rect.left < 10) {
+          htmlEl.style.left = '10px';
+        }
+      });
+    };
+    const colorPickerObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        const el = m.target as HTMLElement;
+        if (!el.classList?.contains('sp-container')) continue;
+        if (el.classList.contains('sp-hidden')) continue;
+        requestAnimationFrame(repositionColorPicker);
+      }
+    });
+    colorPickerObserver.observe(document.body, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['class', 'style'],
     });
 
-    // Linkli Görsel component type
-    gjs.DomComponents.addType('link-image', {
-      extend: 'link',
-      model: {
-        defaults: {
-          tagName: 'a',
-          droppable: false,
-          traits: [
-            {
-              type: 'text',
-              name: 'href',
-              label: 'Link URL',
-              placeholder: 'https://example.com',
-            },
-            {
-              type: 'select',
-              name: 'target',
-              label: 'Açılış',
-              options: [
-                { id: '_blank', value: '_blank', name: 'Yeni Sekme' },
-                { id: '_self', value: '_self', name: 'Aynı Sayfa' },
-              ],
-            },
-          ],
-          components: [
-            {
-              type: 'image',
-              attributes: { src: 'https://via.placeholder.com/350x200', alt: 'Görsel' },
-              style: { 'max-width': '100%', height: 'auto', display: 'block' },
-            },
-          ],
-        },
-      },
+    // ── Wrapper ayarla ──
+    gjs.on('load', () => {
+      try {
+        const wrapper = gjs.getWrapper();
+        if (wrapper) {
+          wrapper.set({
+            removable: false,
+            copyable: false,
+            draggable: false,
+            highlightable: true,
+            selectable: true,
+            resizable: false,
+            stylable: true,
+          });
+          const wrapperStyle = wrapper.getStyle();
+          if (!wrapperStyle['background-color'] && !wrapperStyle['background']) {
+            wrapper.addStyle({ 'background-color': '#ffffff' });
+          }
+        }
+      } catch {}
+      setTimeout(() => migrateCssRulesToInline(gjs), 100);
     });
 
-    // Link component için trait'ler
-    gjs.DomComponents.addType('link', {
-      model: {
-        defaults: {
-          traits: [
-            {
-              type: 'text',
-              name: 'href',
-              label: 'Link URL',
-            },
-            {
-              type: 'select',
-              name: 'target',
-              label: 'Açılış',
-              options: [
-                { id: 'self', value: '', name: 'Aynı Sayfa' },
-                { id: '_blank', value: '_blank', name: 'Yeni Sekme' },
-              ],
-            },
-            {
-              type: 'text',
-              name: 'title',
-              label: 'Başlık',
-            },
-          ],
-        },
-      },
+    // ── Tüm component'lere resize handle + spacing trait'leri ekle ──
+    gjs.on('component:selected', (component: any) => {
+      if ((component as any).is?.('wrapper')) {
+        setSpacingInfo(null);
+        selectedCompRef.current = null;
+        return;
+      }
+      if (!component.get('resizable')) {
+        component.set('resizable', {
+          tl: true, tr: true, bl: true, br: true,
+          tc: true, bc: true, cl: true, cr: true,
+          step: GRID,
+          minDim: 10,
+        });
+      }
+      const traits = component.get('traits');
+      const hasSpacing = traits?.where?.({ name: 'data-mt' })?.length > 0;
+      if (!hasSpacing) {
+        const style = getResolvedStyle(component);
+        const spacingTraits = [
+          { type: 'spacing-slider', name: 'data-mt', label: '↕ Üst Uzaklık', changeProp: true },
+          { type: 'spacing-slider', name: 'data-mb', label: '↕ Alt Uzaklık', changeProp: true },
+          { type: 'spacing-slider', name: 'data-pt', label: '⬜ İç Üst', changeProp: true },
+          { type: 'spacing-slider', name: 'data-pb', label: '⬜ İç Alt', changeProp: true },
+          { type: 'spacing-slider', name: 'data-pl', label: '⬜ İç Sol', changeProp: true },
+          { type: 'spacing-slider', name: 'data-pr', label: '⬜ İç Sağ', changeProp: true },
+        ];
+        spacingTraits.forEach(t => {
+          if (!traits?.where?.({ name: t.name })?.length) {
+            component.addTrait(t);
+          }
+        });
+        const cssMap: Record<string, string> = {
+          'data-mt': 'margin-top',
+          'data-mb': 'margin-bottom',
+          'data-pt': 'padding-top',
+          'data-pb': 'padding-bottom',
+          'data-pl': 'padding-left',
+          'data-pr': 'padding-right',
+        };
+        Object.entries(cssMap).forEach(([prop, cssProp]) => {
+          const val = parseInt(style[cssProp]) || 0;
+          if (val) component.set(prop, val);
+        });
+        Object.entries(cssMap).forEach(([prop, cssProp]) => {
+          component.on(`change:${prop}`, () => {
+            const val = component.get(prop);
+            component.addStyle({ [cssProp]: val ? `${val}px` : '0px' });
+          });
+        });
+      }
+
+      const parent = component.parent();
+      if (parent) {
+        const siblings = parent.components()?.models || [];
+        const idx = siblings.indexOf(component);
+        const prev = idx > 0 ? siblings[idx - 1] : null;
+        const next = idx < siblings.length - 1 ? siblings[idx + 1] : null;
+        const resolved = getResolvedStyle(component);
+        setSpacingInfo({
+          mt: parseInt(resolved['margin-top']) || 0,
+          mb: parseInt(resolved['margin-bottom']) || 0,
+          ml: parseInt(resolved['margin-left']) || 0,
+          mr: parseInt(resolved['margin-right']) || 0,
+          prevName: prev ? (prev.getName?.() || prev.get('tagName') || 'Element') : '',
+          nextName: next ? (next.getName?.() || next.get('tagName') || 'Element') : '',
+          selectedName: component.getName?.() || component.get('tagName') || 'Element',
+        });
+        selectedCompRef.current = component;
+      }
     });
 
-    // Load initial content
+    gjs.on('component:deselected', () => {
+      setSpacingInfo(null);
+      selectedCompRef.current = null;
+    });
+
+    // ── Yeni eklenen component 600px'e sığsın + td padding sıfırla ──
+    gjs.on('component:add', (component: any) => {
+      const type = component.get?.('type') || '';
+      if (type === 'wrapper' || type === 'textnode' || type === 'comment') return;
+      const parent = component.parent?.();
+      if (!parent) return;
+      const parentType = parent.get?.('type') || '';
+      if (parentType === 'wrapper') {
+        const style = component.getStyle();
+        if (!style.width) {
+          component.addStyle({ width: '100%' });
+        }
+      }
+      if (parentType === 'cell') {
+        parent.addStyle({
+          'padding': '0',
+          'padding-top': '0',
+          'padding-bottom': '0',
+          'padding-left': '0',
+          'padding-right': '0',
+        });
+        ['data-cell-pt', 'data-cell-pb', 'data-cell-pl', 'data-cell-pr'].forEach(p => {
+          try { parent.set(p, 0); } catch {}
+        });
+      }
+    });
+
+    // ── Snap to Grid: Resize bitti ──
+    gjs.on('component:resize', ({ target }: any) => {
+      if (!target) return;
+      const style = target.getStyle();
+      const upd: Record<string, string> = {};
+      ['width', 'height', 'min-height'].forEach((p) => {
+        if (style[p] && style[p] !== 'auto') {
+          const val = parseFloat(style[p]);
+          if (isNaN(val)) return;
+          upd[p] = `${Math.round(val / GRID) * GRID}px`;
+        }
+      });
+      if (Object.keys(upd).length) target.addStyle(upd);
+    });
+
+    // ── Snap to Grid: Style manager değişikliği ──
+    const snapProps = new Set([
+      'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+      'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+      'gap', 'row-gap', 'column-gap',
+      'width', 'height', 'min-height', 'min-width', 'max-width',
+      'top', 'left', 'right', 'bottom',
+    ]);
+
+    gjs.on('styleManager:change', ({ property }: any) => {
+      try {
+        const name = property?.getName?.();
+        if (!name || !snapProps.has(name)) return;
+        const val = String(property.getValue?.() ?? '');
+        if (!val || val === 'auto' || val === 'none') return;
+        const snapped = snap(val);
+        if (snapped !== val) property.setValue?.(snapped);
+      } catch {}
+    });
+
+    // ── Initial content yükleme ──
     if (initialGjsData) {
       gjs.loadProjectData(initialGjsData);
     } else if (initialHtml) {
-      gjs.setComponents(initialHtml);
-      if (initialCss) {
-        gjs.setStyle(initialCss);
+      const isFullHtml = initialHtml.trim().startsWith('<!DOCTYPE') || initialHtml.trim().toLowerCase().startsWith('<html');
+      if (isFullHtml) {
+        const bodyMatch = initialHtml.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        const styleMatches = [...initialHtml.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)];
+        const bodyContent = bodyMatch ? bodyMatch[1].trim() : '';
+        const mainStyle = styleMatches.length > 1
+          ? styleMatches[styleMatches.length - 1][1].trim()
+          : styleMatches.length === 1 ? styleMatches[0][1].trim() : '';
+        gjs.setComponents(bodyContent);
+        if (mainStyle) gjs.setStyle(mainStyle);
+      } else {
+        gjs.setComponents(initialHtml);
+        if (initialCss) gjs.setStyle(initialCss);
       }
     }
 
-    // Varsayılan olarak tablet görünümünde aç
-    gjs.setDevice('Tablet');
+    gjs.setDevice('Desktop');
 
     setEditor(gjs);
 
-    return () => {
-      gjs.destroy();
-    };
+    return () => { colorPickerObserver.disconnect(); gjs.destroy(); };
   }, []);
 
-  const handleSave = () => {
+  // ── Handlers ──
+
+  const handleSave = useCallback(() => {
     if (!editor) return;
-
     const rawHtml = editor.getHtml();
-    const css = editor.getCss();
+    const css = (editor.getCss() || '').replace(/\*\s*\{[^}]*box-sizing[^}]*\}/gi, '').trim();
     const gjsData = editor.getProjectData();
+    const bodyMatch = rawHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    const bodyRaw = bodyMatch ? bodyMatch[1] : rawHtml;
 
-    const html = css 
-      ? `<style>${css}</style>${rawHtml}` 
-      : rawHtml;
+    const wrapper = editor.getWrapper();
+    const wrapperStyle = wrapper?.getStyle() || {};
+    const bodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
 
-    onSave({ html, css: css || '', gjsData });
+    const bodyContent = inlineCssIntoHtml(bodyRaw, css);
+
+    const fullHtml = `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <title></title>
+  <!--[if (gte mso 9)|(IE)]>
+  <style type="text/css">
+    body { width: 600px !important; margin: 0 auto !important; }
+    table { border-collapse: collapse; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; }
+  </style>
+  <![endif]-->
+  <style type="text/css">
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #e8ecf0;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+}
+img { border: 0; outline: none; text-decoration: none; display: block; max-width: 100%; }
+table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+div, p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
+${css}
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#e8ecf0;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e8ecf0;">
+    <tr>
+      <td align="center" valign="top" style="padding:0;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:${bodyBg};margin:0 auto;table-layout:fixed;">
+          <tr>
+            <td valign="top" style="padding:0;background-color:${bodyBg};overflow:hidden;width:600px;max-width:600px;word-wrap:break-word;">
+${bodyContent}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    onSave({ html: fullHtml, css: '', gjsData });
+  }, [editor, onSave]);
+
+  const switchDevice = (device: 'Desktop' | 'Tablet' | 'Mobile') => {
+    editor?.setDevice(device);
+    setActiveDevice(device);
+  };
+
+  const handleTextAlign = (align: string) => {
+    const sel = editor?.getSelected();
+    if (sel) sel.addStyle({ 'text-align': align });
+  };
+
+  const handleMoveUp = () => {
+    const sel = editor?.getSelected();
+    if (!sel) return;
+    const parent = sel.parent();
+    if (!parent) return;
+    const siblings = parent.components();
+    const idx = siblings.indexOf(sel);
+    if (idx <= 0) return;
+    try {
+      sel.move(parent, { at: idx - 1 });
+    } catch {
+      const clone = sel.clone();
+      sel.remove();
+      parent.components().add(clone, { at: idx - 1 });
+      editor?.select(clone);
+    }
+  };
+
+  const handleMoveDown = () => {
+    const sel = editor?.getSelected();
+    if (!sel) return;
+    const parent = sel.parent();
+    if (!parent) return;
+    const siblings = parent.components();
+    const idx = siblings.indexOf(sel);
+    if (idx >= siblings.length - 1) return;
+    try {
+      sel.move(parent, { at: idx + 2 });
+    } catch {
+      const clone = sel.clone();
+      sel.remove();
+      parent.components().add(clone, { at: idx + 1 });
+      editor?.select(clone);
+    }
+  };
+
+  const handlePreview = () => {
+    if (!editor) return;
+    const rawHtml = editor.getHtml();
+    const css = (editor.getCss() || '').replace(/\*\s*\{[^}]*box-sizing[^}]*\}/gi, '').trim();
+    const bodyMatch = rawHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    const bodyRaw = bodyMatch ? bodyMatch[1] : rawHtml;
+    const inlined = inlineCssIntoHtml(bodyRaw, css);
+
+    const wrapper = editor.getWrapper();
+    const wrapperStyle = wrapper?.getStyle() || {};
+    const bodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#e8ecf0;font-family:Arial,Helvetica,sans-serif;}img{border:0;display:block;max-width:100%;}table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;}div,p,h1,h2,h3,h4,h5,h6{margin:0;padding:0;}${css}</style></head><body style="margin:0;padding:0;background:#e8ecf0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#e8ecf0;"><tr><td align="center" valign="top"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:${bodyBg};table-layout:fixed;"><tr><td valign="top" style="background-color:${bodyBg};overflow:hidden;width:600px;max-width:600px;word-wrap:break-word;">${inlined}</td></tr></table></td></tr></table></body></html>`);
+      win.document.close();
+    }
+  };
+
+  const updateSpacing = (prop: 'margin-top' | 'margin-bottom' | 'margin-left' | 'margin-right', val: number) => {
+    const comp = selectedCompRef.current;
+    if (!comp) return;
+    comp.addStyle({ [prop]: `${val}px` });
+    const keyMap: Record<string, string> = { 'margin-top': 'mt', 'margin-bottom': 'mb', 'margin-left': 'ml', 'margin-right': 'mr' };
+    setSpacingInfo(prev => prev ? { ...prev, [keyMap[prop]]: val } : null);
   };
 
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-gray-50 rounded-2xl overflow-hidden shadow-lg border border-gray-200">
-      {/* Left Panel - Blocks */}
-      <div className="w-[380px] bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Bloklar</h3>
-        </div>
-        <div id="blocks" className="flex-1 overflow-y-auto"></div>
-      </div>
+    <>
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          onComplete={(url, width, height) => {
+            const comp = cropTargetRef.current;
+            if (comp) {
+              comp.set('src', url);
+              comp.addAttributes({ src: url });
+              const maxW = 300;
+              const ratio = height / width;
+              const displayW = Math.min(width, maxW);
+              const displayH = Math.round(displayW * ratio);
+              comp.addStyle({
+                width: `${displayW}px`,
+                height: `${displayH}px`,
+                display: 'block',
+              });
+            }
+            setCropFile(null);
+            cropTargetRef.current = null;
+          }}
+          onClose={() => {
+            setCropFile(null);
+            cropTargetRef.current = null;
+          }}
+        />
+      )}
 
-      {/* Center - Canvas */}
-      <div className="flex-1 flex flex-col bg-gray-100">
-        {/* Toolbar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => editor?.runCommand('core:undo')}
-              className="p-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700 transition-colors"
-              title="Geri Al"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+      <div className={`flex bg-gray-50 overflow-hidden shadow-lg border border-gray-200 transition-all ${isFullscreen ? 'fixed inset-0 z-50 h-screen rounded-none' : 'h-[calc(100vh-120px)] rounded-2xl'}`}>
+
+        {/* ── Sol Panel ── */}
+        <div className="w-[340px] bg-white border-r border-gray-200 flex flex-col">
+          <div className="p-3 border-b border-gray-100">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
               </svg>
-            </button>
-            <button
-              onClick={() => editor?.runCommand('core:redo')}
-              className="p-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700 transition-colors"
-              title="Yinele"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
-              </svg>
-            </button>
-            <div className="w-px h-5 bg-gray-200 mx-2"></div>
-            <button
-              onClick={() => editor?.setDevice('Desktop')}
-              className="p-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700 transition-colors"
-              title="Masaüstü"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => editor?.setDevice('Tablet')}
-              className="p-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700 transition-colors"
-              title="Tablet"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </button>
-            <button
-              onClick={() => editor?.setDevice('Mobile')}
-              className="p-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-700 transition-colors"
-              title="Mobil"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </button>
+              <input
+                type="text"
+                placeholder="Blok ara..."
+                value={blockSearch}
+                onChange={(e) => setBlockSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 focus:bg-white transition-colors"
+              />
+              {blockSearch && (
+                <button onClick={() => setBlockSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-sm font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50"
-          >
-            {saving ? (
-              <>
-                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Kaydediliyor...
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                </svg>
-                Kaydet
-              </>
+          <div id="blocks" className="flex-1 overflow-y-auto"></div>
+        </div>
+
+        {/* ── Orta Canvas ── */}
+        <div className="flex-1 flex flex-col bg-gray-100 min-w-0">
+          <EditorToolbar
+            editor={editor}
+            activeDevice={activeDevice}
+            onSwitchDevice={switchDevice}
+            onTextAlign={handleTextAlign}
+            onMoveUp={handleMoveUp}
+            onMoveDown={handleMoveDown}
+            onPreview={handlePreview}
+            onSave={handleSave}
+            saving={saving}
+            showGrid={showGrid}
+            onToggleGrid={() => setShowGrid(g => !g)}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => setIsFullscreen(f => !f)}
+          />
+          <div ref={editorRef} className="flex-1 min-h-0"/>
+        </div>
+
+        {/* ── Sağ Panel ── */}
+        <div className="w-72 bg-white border-l border-gray-200 flex flex-col">
+          <div className="flex p-1.5 gap-1 border-b border-gray-200 bg-gray-50">
+            {([
+              { key: 'styles', label: 'Stiller' },
+              { key: 'layers', label: 'Katmanlar' },
+              { key: 'traits', label: 'Özellikler' },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  activeTab === key
+                    ? 'bg-white text-blue-600 shadow-sm border border-gray-200'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div
+            id="styles"
+            className={`flex-1 overflow-y-auto ${activeTab === 'styles' ? '' : 'hidden'}`}
+          />
+          <div className={`flex-1 flex flex-col overflow-hidden ${activeTab === 'layers' ? '' : 'hidden'}`}>
+            {spacingInfo && (
+              <SpacingPanel spacingInfo={spacingInfo} onUpdateSpacing={updateSpacing} />
             )}
-          </button>
-        </div>
-        {/* Canvas */}
-        <div ref={editorRef} className="flex-1"></div>
-      </div>
-
-      {/* Right Panel - Styles, Layers & Traits */}
-      <div className="w-72 bg-white border-l border-gray-200 flex flex-col">
-        {/* Tabs */}
-        <div className="flex p-2 gap-1 border-b border-gray-200">
-          <button 
-            onClick={() => setActiveTab('styles')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === 'styles' 
-                ? 'bg-blue-50 text-blue-600' 
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            Stiller
-          </button>
-          <button 
-            onClick={() => setActiveTab('layers')}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === 'layers' 
-                ? 'bg-blue-50 text-blue-600' 
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            Katmanlar
-          </button>
-        </div>
-        <div id="styles" className={`flex-1 overflow-y-auto ${activeTab === 'styles' ? '' : 'hidden'}`}></div>
-        <div id="layers" className={`flex-1 overflow-y-auto ${activeTab === 'layers' ? '' : 'hidden'}`}></div>
-        {/* Traits */}
-        <div className="border-t border-gray-200">
-          <div className="p-3 border-b border-gray-200">
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Özellikler</h4>
+            <div id="layers" className="flex-1 overflow-y-auto"/>
           </div>
-          <div id="traits" className="p-2 max-h-48 overflow-y-auto"></div>
+          <div
+            id="traits"
+            className={`flex-1 overflow-y-auto p-3 ${activeTab === 'traits' ? '' : 'hidden'}`}
+          />
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -927,7 +927,13 @@ export default function MailPage() {
                         <div className="w-full h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-3 overflow-hidden">
                           {template.htmlContent ? (
                             <iframe
-                              srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:4px;transform:scale(0.25);transform-origin:top left;width:400%;pointer-events:none;}${template.cssContent || ''}</style></head><body>${template.htmlContent}</body></html>`}
+                              srcDoc={(() => {
+                                const isFullHtml = template.htmlContent.trim().startsWith('<!DOCTYPE') || template.htmlContent.trim().toLowerCase().startsWith('<html');
+                                if (isFullHtml) {
+                                  return template.htmlContent.replace('<body', '<body style="transform:scale(0.25);transform-origin:top left;width:400%;pointer-events:none;margin:0;padding:4px;"');
+                                }
+                                return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:4px;transform:scale(0.25);transform-origin:top left;width:400%;pointer-events:none;}${template.cssContent || ''}</style></head><body>${template.htmlContent}</body></html>`;
+                              })()}
                               className="w-full h-full border-0 pointer-events-none"
                               title={template.name}
                               sandbox=""
@@ -1019,13 +1025,15 @@ export default function MailPage() {
                       {(() => {
                         const currentTemplate = templates.find(t => t.id === previewTemplate);
                         if (currentTemplate?.htmlContent) {
-                          // CSS'i style etiketi olarak HTML'e embed et
-                          const fullHtml = currentTemplate.cssContent 
-                            ? `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;}*{max-width:100%;box-sizing:border-box;}img{height:auto;}${currentTemplate.cssContent}</style></head><body>${currentTemplate.htmlContent}</body></html>`
-                            : `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;}*{max-width:100%;box-sizing:border-box;}img{height:auto;}</style></head><body>${currentTemplate.htmlContent}</body></html>`;
+                          const isFullHtml = currentTemplate.htmlContent.trim().startsWith('<!DOCTYPE') || currentTemplate.htmlContent.trim().toLowerCase().startsWith('<html');
+                          const srcDoc = isFullHtml
+                            ? currentTemplate.htmlContent
+                            : (currentTemplate.cssContent
+                              ? `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;}*{max-width:100%;box-sizing:border-box;}img{height:auto;}${currentTemplate.cssContent}</style></head><body>${currentTemplate.htmlContent}</body></html>`
+                              : `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;}*{max-width:100%;box-sizing:border-box;}img{height:auto;}</style></head><body>${currentTemplate.htmlContent}</body></html>`);
                           return (
                             <iframe
-                              srcDoc={fullHtml}
+                              srcDoc={srcDoc}
                               className="w-full border-0"
                               style={{ height: '400px', maxHeight: '50vh' }}
                               title="Email Önizleme"

@@ -212,7 +212,14 @@ export default function TemplatesPage() {
               <div className="h-40 bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
                 {template.htmlContent ? (
                   <iframe
-                    srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:8px;transform:scale(0.4);transform-origin:top left;width:250%;pointer-events:none;}${template.cssContent || ''}</style></head><body>${template.htmlContent}</body></html>`}
+                    srcDoc={(() => {
+                      const isFullHtml = template.htmlContent.trim().startsWith('<!DOCTYPE') || template.htmlContent.trim().toLowerCase().startsWith('<html');
+                      if (isFullHtml) {
+                        // Tam HTML — sadece scale ekle
+                        return template.htmlContent.replace('<body', '<body style="transform:scale(0.4);transform-origin:top left;width:250%;pointer-events:none;margin:0;padding:8px;"');
+                      }
+                      return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:8px;transform:scale(0.4);transform-origin:top left;width:250%;pointer-events:none;}${template.cssContent || ''}</style></head><body>${template.htmlContent}</body></html>`;
+                    })()}
                     className="w-full h-full border-0 pointer-events-none"
                     title={template.name}
                     sandbox=""

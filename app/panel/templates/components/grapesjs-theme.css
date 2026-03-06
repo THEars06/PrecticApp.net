@@ -47,16 +47,6 @@
 /* ============================
    CANVAS
    ============================ */
-.gjs-cv-canvas {
-  background-color: var(--canvas-bg) !important;
-}
-
-.gjs-frame-wrapper {
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
-  border-radius: 8px;
-  margin: 24px;
-}
 
 /* ============================
    BLOKLAR - GENİŞ VE DÜZGÜN
@@ -412,38 +402,49 @@
 }
 
 /* ============================
-   MODAL
+   MODAL — tamamen gizli
+   Görsel yüklemek için: canvas'ta görsele çift tıkla
    ============================ */
 .gjs-mdl-container {
-  background: rgba(0, 0, 0, 0.5) !important;
-  backdrop-filter: blur(4px) !important;
+  display: none !important;
 }
 
 .gjs-mdl-dialog {
   background: var(--panel-bg) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 16px !important;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25) !important;
   overflow: hidden !important;
+  width: 700px !important;
+  max-width: 92vw !important;
+  max-height: 88vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  position: relative !important;
+  margin: 0 !important;
+  top: auto !important;
+  left: auto !important;
 }
 
 .gjs-mdl-header {
   background: transparent !important;
   border-bottom: 1px solid var(--border-color) !important;
-  padding: 18px 24px !important;
+  padding: 16px 20px !important;
+  flex-shrink: 0 !important;
 }
 
 .gjs-mdl-title {
   font-weight: 600 !important;
-  font-size: 16px !important;
+  font-size: 15px !important;
   color: var(--text-primary) !important;
 }
 
 .gjs-mdl-btn-close {
-  font-size: 24px !important;
+  font-size: 22px !important;
   color: var(--text-muted) !important;
   opacity: 1 !important;
   transition: color 0.15s ease !important;
+  cursor: pointer !important;
 }
 
 .gjs-mdl-btn-close:hover {
@@ -451,9 +452,11 @@
 }
 
 .gjs-mdl-content {
-  padding: 24px !important;
+  padding: 20px !important;
   background: transparent !important;
   color: var(--text-primary) !important;
+  overflow-y: auto !important;
+  flex: 1 !important;
 }
 
 /* ============================
@@ -607,4 +610,300 @@
   background: var(--panel-bg) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 12px !important;
+  z-index: 99999 !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
+  max-height: calc(100vh - 20px) !important;
+  overflow: auto !important;
+}
+
+/* Slider trait stili */
+.gjs-trt-trait input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 5px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--accent-light), var(--accent));
+  outline: none;
+  cursor: grab;
+}
+.gjs-trt-trait input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: grab;
+}
+.gjs-trt-trait input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: grab;
+}
+.gjs-trt-trait input[type="range"]:active {
+  cursor: grabbing;
+}
+.gjs-trt-trait input[type="range"]:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+.gjs-trt-trait input[type="range"]:active::-moz-range-thumb {
+  cursor: grabbing;
+  transform: scale(1.15);
+}
+
+/* ============================
+   ASSET MANAGER — GENİŞLETİLMİŞ
+   ============================ */
+.gjs-am-assets-cont {
+  overflow-y: auto !important;
+  max-height: 50vh !important;
+}
+
+.gjs-am-assets-header {
+  background: var(--panel-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 12px 16px !important;
+}
+
+.gjs-am-add-asset .gjs-btn-prim {
+  width: 100% !important;
+  margin-top: 8px !important;
+}
+
+/* ============================
+   DRAG PLACEHOLDER — BELIRGIN
+   ============================ */
+.gjs-placeholder {
+  border: 2px dashed var(--accent) !important;
+  background: var(--accent-light) !important;
+  border-radius: 4px !important;
+  min-height: 6px !important;
+}
+
+.gjs-placeholder-int {
+  background: var(--accent) !important;
+  opacity: 0.15 !important;
+}
+
+/* ============================
+   SEÇIM TOOLBAR — GELİŞTİRİLMİŞ
+   ============================ */
+.gjs-toolbar {
+  background: #1e293b !important;
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 5px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+}
+
+.gjs-toolbar-item {
+  width: 32px !important;
+  height: 32px !important;
+  color: rgba(255,255,255,0.75) !important;
+  border-radius: 7px !important;
+}
+
+.gjs-toolbar-item:hover {
+  background: rgba(255,255,255,0.15) !important;
+  color: #ffffff !important;
+}
+
+/* ============================
+   SNAP / RESIZE HANDLES
+   ============================ */
+.gjs-resizer-h-tl,
+.gjs-resizer-h-tr,
+.gjs-resizer-h-bl,
+.gjs-resizer-h-br {
+  background: var(--accent) !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 3px !important;
+  width: 10px !important;
+  height: 10px !important;
+  box-shadow: 0 2px 6px rgba(59,130,246,0.5) !important;
+}
+
+.gjs-resizer-h-tc,
+.gjs-resizer-h-bc,
+.gjs-resizer-h-cl,
+.gjs-resizer-h-cr {
+  background: var(--accent) !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 3px !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+
+/* ============================
+   CANVAS WRAPPER — ORTALANMIŞ
+   ============================ */
+.gjs-cv-canvas {
+  background-color: #e8ecf0 !important;
+  overflow: auto !important;
+}
+
+.gjs-frame-wrapper {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  justify-content: center !important;
+}
+
+.gjs-frame-wrapper__right,
+.gjs-frame-wrapper__left {
+  display: none !important;
+}
+
+.gjs-frame {
+  margin: 0 auto !important;
+}
+
+/* ============================
+   LAYER MANAGER — GELİŞTİRİLMİŞ
+   ============================ */
+.gjs-layer-vis {
+  opacity: 0.4 !important;
+  transition: opacity 0.15s !important;
+}
+
+.gjs-layer:hover .gjs-layer-vis {
+  opacity: 1 !important;
+}
+
+.gjs-layer-move {
+  cursor: grab !important;
+  opacity: 0.4 !important;
+  transition: opacity 0.15s !important;
+}
+
+.gjs-layer:hover .gjs-layer-move {
+  opacity: 1 !important;
+}
+
+/* ============================
+   TRAITS PANEL
+   ============================ */
+#traits .gjs-trt-traits {
+  padding: 0 !important;
+}
+
+#traits .gjs-trt-trait {
+  padding: 8px 0 !important;
+}
+
+/* ============================
+   GENEL İYİLEŞTİRMELER
+   ============================ */
+.gjs-selected {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: -2px !important;
+}
+
+.gjs-hovered {
+  outline: 1.5px dashed rgba(59,130,246,0.5) !important;
+  outline-offset: -1px !important;
+}
+
+/* Kategori içeriği padding düzeltme */
+.gjs-block-category.gjs-open .gjs-blocks-c {
+  padding: 10px 12px !important;
+  gap: 8px !important;
+}
+
+/* react-image-crop resetleme */
+.ReactCrop {
+  max-height: 50vh !important;
+}
+
+.ReactCrop__image {
+  max-height: 50vh !important;
+}
+
+/* ============================
+   TOOLBAR BUTTON GROUPS
+   ============================ */
+.inline-flex.rounded-lg.border {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.inline-flex.rounded-lg.border button:active {
+  background-color: #f1f5f9;
+  transform: scale(0.95);
+}
+
+/* ============================
+   LAYER SPACING CONTROLS
+   ============================ */
+input[type="range"].accent-blue-500 {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"].accent-blue-500::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(59,130,246,0.4);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"].accent-blue-500::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 6px rgba(59,130,246,0.5);
+}
+
+input[type="range"].accent-blue-500::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 3px rgba(59,130,246,0.4);
+  cursor: pointer;
+}
+
+input[type="range"].accent-blue-500::-webkit-slider-runnable-track {
+  height: 6px;
+  background: linear-gradient(90deg, #3b82f6 0%, #e2e8f0 100%);
+  border-radius: 3px;
+}
+
+input[type="range"].accent-blue-500::-moz-range-track {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+}
+
+/* ============================
+   LAYER PANEL ENHANCEMENTS
+   ============================ */
+.gjs-layer {
+  transition: background-color 0.15s ease !important;
+}
+
+.gjs-layer.gjs-selected {
+  background-color: var(--accent-light) !important;
+  border-left: 3px solid var(--accent) !important;
+}
+
+.gjs-layer-name {
+  font-size: 12px !important;
+  font-weight: 500 !important;
 }
