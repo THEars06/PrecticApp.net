@@ -129,7 +129,11 @@ export default function TemplateEditor({
               if (!res.ok) continue;
               const data = await res.json();
               if (data.url) {
-                const imgUrl = data.url.startsWith('http') ? data.url : `${UPLOAD_BASE}${data.url.startsWith('/') ? '' : '/'}${data.url}`;
+                let imgUrl = data.url;
+                if (imgUrl.startsWith('http')) {
+                  try { imgUrl = new URL(imgUrl).pathname; } catch {}
+                }
+                imgUrl = `${UPLOAD_BASE}${imgUrl.startsWith('/') ? '' : '/'}${imgUrl}`;
                 gjs.AssetManager.add({ src: imgUrl, type: 'image', name: (f as File).name });
               }
             } catch (err) {
