@@ -77,6 +77,12 @@ export default function MailPage() {
   const [campaignSearch, setCampaignSearch] = useState('');
   // Kampanyadan gelen kullanıcılar
   const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
+  // Gunluk limit ve aralik
+  const [dailyLimit, setDailyLimit] = useState<string>('');
+  const [intervalHours, setIntervalHours] = useState<string>('24');
+  const [scheduleMode, setScheduleMode] = useState<'immediate' | 'startDate' | 'manual'>('immediate');
+  const [startAt, setStartAt] = useState<string>('');
+  const [manualSchedules, setManualSchedules] = useState<string[]>([]);
 
   // Kullanıcıları çek (arama veya sayfa bazlı)
   const fetchUsers = useCallback(async (search: string, page: number, append: boolean) => {
@@ -373,36 +379,82 @@ export default function MailPage() {
     setSending(true);
     try {
       const token = localStorage.getItem('accessToken');
-      // Seçilen kullanıcıların email listesini al
       const recipientEmails = selectedUsers.map(u => u.email);
       
+      const body: any = {
+        subject,
+        recipients: recipientEmails,
+        templateId: selectedTemplate,
+        providerId: selectedProvider,
+        platform: selectedPlatform,
+      };
+
+      const limitNum = parseInt(dailyLimit);
+      if (limitNum > 0 && limitNum < recipientEmails.length) {
+        body.dailyLimit = limitNum;
+        body.scheduleMode = scheduleMode;
+
+        if (scheduleMode === 'immediate') {
+          const intervalNum = parseFloat(intervalHours);
+          if (intervalNum > 0) {
+            body.intervalHours = intervalNum;
+          }
+        } else if (scheduleMode === 'startDate') {
+          if (startAt) {
+            body.startAt = new Date(startAt).toISOString();
+          }
+          const intervalNum = parseFloat(intervalHours);
+          if (intervalNum > 0) {
+            body.intervalHours = intervalNum;
+          }
+        } else if (scheduleMode === 'manual') {
+          body.scheduleTimes = manualSchedules
+            .filter(dt => dt)
+            .map(dt => new Date(dt).toISOString());
+        }
+      }
+
       const response = await fetch(`${API_URL}/mail/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          subject,
-          recipients: recipientEmails,
-          templateId: selectedTemplate,
-          providerId: selectedProvider,
-          platform: selectedPlatform,
-        }),
+        body: JSON.stringify(body),
       });
 
       const result = await response.json();
       
       if (response.ok) {
-        alert(`✅ Mail gönderimi tamamlandı!\n\nToplam: ${result.totalRecipients}\nBaşarılı: ${result.successCount}\nBaşarısız: ${result.failCount}`);
-        // Formu sıfırla
+        let msg = `Toplam: ${result.totalRecipients}`;
+        if (result.sentNow > 0) {
+          msg += `\nHemen gönderilen: ${result.sentNow}`;
+          msg += `\nBaşarılı: ${result.successCount}`;
+          msg += `\nBaşarısız: ${result.failCount}`;
+        }
+        if (result.queued > 0 && result.schedule?.length > 0) {
+          msg += `\n\nKuyrukta bekleyen: ${result.queued}`;
+          msg += `\nZamanlanan batch sayısı: ${result.schedule.length}`;
+          const nextDate = new Date(result.schedule[0].scheduledAt);
+          msg += `\nİlk zamanlanmış gönderim: ${nextDate.toLocaleString('tr-TR')}`;
+          if (result.schedule.length > 1) {
+            const lastDate = new Date(result.schedule[result.schedule.length - 1].scheduledAt);
+            msg += `\nSon gönderim: ${lastDate.toLocaleString('tr-TR')}`;
+          }
+        }
+        alert(msg);
         setCurrentStep(1);
         setSelectedCampaigns([]);
         setSelectedUsers([]);
         setSubject('');
         setSelectedTemplate(null);
+        setDailyLimit('');
+        setIntervalHours('24');
+        setScheduleMode('immediate');
+        setStartAt('');
+        setManualSchedules([]);
       } else {
-        alert(`❌ Hata: ${result.message || 'Mail gönderilemedi'}`);
+        alert(`Hata: ${result.message || 'Mail gönderilemedi'}`);
       }
     } catch (error) {
       console.error('Mail gönderilirken hata:', error);
@@ -1154,11 +1206,215 @@ export default function MailPage() {
                 </div>
               )}
 
+              {/* Zamanlama Ayarlari */}
+              {selectedProvider && (
+                <div className="mt-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                  <h3 className="font-semibold text-gray-900 mb-1">Gönderim Zamanlama</h3>
+                  <p className="text-xs text-gray-500 mb-4">Büyük listelerde batch limiti belirleyerek kademeli gönderim yapabilirsiniz. Boş bırakırsanız tümü hemen gönderilir.</p>
+                  
+                  {/* Batch Limit */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Batch Başına Limit</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={dailyLimit}
+                      onChange={(e) => {
+                        setDailyLimit(e.target.value);
+                        setManualSchedules([]);
+                      }}
+                      placeholder={`örn: 500 (toplam ${totalUsers.toLocaleString()} kişi)`}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Her seferde kaç mail gönderilsin</p>
+                  </div>
+
+                  {/* Zamanlama Modu Secimi */}
+                  {dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers && (
+                    <div className="space-y-4">
+                      <label className="block text-sm font-medium text-gray-700">Zamanlama Modu</label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {[
+                          { id: 'immediate' as const, title: 'Hemen + Aralık', desc: 'İlk batch hemen, kalanlar aralıkla' },
+                          { id: 'startDate' as const, title: 'Başlangıç Tarihi', desc: 'Belirli tarihte başla, aralıkla devam' },
+                          { id: 'manual' as const, title: 'Manuel Zamanlama', desc: 'Her batch için ayrı tarih/saat' },
+                        ].map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => {
+                              setScheduleMode(mode.id);
+                              if (mode.id === 'manual') {
+                                const batchCount = Math.ceil(totalUsers / parseInt(dailyLimit));
+                                setManualSchedules(Array(batchCount).fill(''));
+                              }
+                            }}
+                            className={`p-3 rounded-xl border-2 text-left transition-all ${
+                              scheduleMode === mode.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                            }`}
+                          >
+                            <p className={`text-sm font-medium ${scheduleMode === mode.id ? 'text-blue-700' : 'text-gray-900'}`}>{mode.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{mode.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Immediate: Aralik secici */}
+                      {scheduleMode === 'immediate' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Gönderim Aralığı (Saat)</label>
+                          <select
+                            value={intervalHours}
+                            onChange={(e) => setIntervalHours(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                          >
+                            <option value="0.5">30 Dakika</option>
+                            <option value="1">1 Saat</option>
+                            <option value="2">2 Saat</option>
+                            <option value="3">3 Saat</option>
+                            <option value="6">6 Saat</option>
+                            <option value="12">12 Saat</option>
+                            <option value="24">24 Saat (1 Gün)</option>
+                            <option value="48">48 Saat (2 Gün)</option>
+                          </select>
+                          <p className="text-xs text-gray-400 mt-1">İlk batch hemen gönderilir, kalanlar bu aralıkla</p>
+                        </div>
+                      )}
+
+                      {/* StartDate: Tarih + Aralik */}
+                      {scheduleMode === 'startDate' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Başlangıç Tarihi ve Saati</label>
+                            <input
+                              type="datetime-local"
+                              value={startAt}
+                              onChange={(e) => setStartAt(e.target.value)}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">İlk batch bu tarihte gönderilir</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Batch Aralığı (Saat)</label>
+                            <select
+                              value={intervalHours}
+                              onChange={(e) => setIntervalHours(e.target.value)}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                            >
+                              <option value="0.5">30 Dakika</option>
+                              <option value="1">1 Saat</option>
+                              <option value="2">2 Saat</option>
+                              <option value="3">3 Saat</option>
+                              <option value="6">6 Saat</option>
+                              <option value="12">12 Saat</option>
+                              <option value="24">24 Saat (1 Gün)</option>
+                              <option value="48">48 Saat (2 Gün)</option>
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">Sonraki batch&apos;ler bu aralıkla gönderilir</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Manuel: Her batch icin ayri tarih */}
+                      {scheduleMode === 'manual' && (
+                        <div className="space-y-3">
+                          <p className="text-xs text-gray-500">Her batch için gönderim tarihi ve saatini belirleyin</p>
+                          <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+                            {manualSchedules.map((dt, idx) => {
+                              const batchSize = parseInt(dailyLimit);
+                              const start = idx * batchSize;
+                              const end = Math.min(start + batchSize, totalUsers);
+                              const count = end - start;
+                              return (
+                                <div key={idx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                                  <div className="flex-shrink-0 w-20">
+                                    <span className="text-xs font-semibold text-blue-600">Batch {idx + 1}</span>
+                                    <p className="text-[10px] text-gray-400">{count.toLocaleString()} kişi</p>
+                                  </div>
+                                  <input
+                                    type="datetime-local"
+                                    value={dt}
+                                    onChange={(e) => {
+                                      const updated = [...manualSchedules];
+                                      updated[idx] = e.target.value;
+                                      setManualSchedules(updated);
+                                    }}
+                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Batch Onizleme */}
+                      {(() => {
+                        const batchSize = parseInt(dailyLimit);
+                        const batchCount = Math.ceil(totalUsers / batchSize);
+                        const previewBatches: Array<{ num: number; count: number; time: string }> = [];
+
+                        for (let i = 0; i < batchCount; i++) {
+                          const start = i * batchSize;
+                          const end = Math.min(start + batchSize, totalUsers);
+                          const count = end - start;
+                          let time = '';
+
+                          if (scheduleMode === 'immediate') {
+                            if (i === 0) {
+                              time = 'Hemen';
+                            } else {
+                              const futureMs = parseFloat(intervalHours) * 60 * 60 * 1000 * i;
+                              const futureDate = new Date(Date.now() + futureMs);
+                              time = futureDate.toLocaleString('tr-TR');
+                            }
+                          } else if (scheduleMode === 'startDate' && startAt) {
+                            const baseTime = new Date(startAt).getTime();
+                            const futureMs = parseFloat(intervalHours) * 60 * 60 * 1000 * i;
+                            const futureDate = new Date(baseTime + futureMs);
+                            time = futureDate.toLocaleString('tr-TR');
+                          } else if (scheduleMode === 'manual' && manualSchedules[i]) {
+                            time = new Date(manualSchedules[i]).toLocaleString('tr-TR');
+                          } else {
+                            time = 'Tarih seçilmedi';
+                          }
+
+                          previewBatches.push({ num: i + 1, count, time });
+                        }
+
+                        return (
+                          <div className="mt-4 p-3 bg-white rounded-lg border border-blue-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-xs font-semibold text-gray-700">Gönderim Planı ({batchCount} batch)</span>
+                            </div>
+                            <div className="max-h-[180px] overflow-y-auto space-y-1">
+                              {previewBatches.map((b) => (
+                                <div key={b.num} className="flex items-center justify-between text-xs py-1.5 px-2 rounded hover:bg-blue-50">
+                                  <span className="text-gray-600">
+                                    <span className="font-medium text-gray-800">Batch {b.num}</span> &middot; {b.count.toLocaleString()} kişi
+                                  </span>
+                                  <span className={`font-medium ${b.time === 'Tarih seçilmedi' ? 'text-red-400' : 'text-blue-600'}`}>{b.time}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Summary */}
               {selectedProvider && (
-                <div className="mt-8 p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
+                <div className="mt-4 p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
                   <h3 className="font-semibold text-gray-900 mb-3">Özet</h3>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
                     <div>
                       <p className="text-gray-500">Platform</p>
                       <p className="font-medium text-gray-900">{selectedPlatform === 'gise' ? 'Gişe Kıbrıs' : 'Kupon Kıbrıs'}</p>
@@ -1174,6 +1430,18 @@ export default function MailPage() {
                     <div>
                       <p className="text-gray-500">Servis</p>
                       <p className="font-medium text-gray-900">{mailProviders.find(p => p.id === selectedProvider)?.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Zamanlama</p>
+                      <p className="font-medium text-gray-900">
+                        {dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers
+                          ? scheduleMode === 'immediate'
+                            ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${intervalHours} saat`
+                            : scheduleMode === 'startDate'
+                              ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${startAt ? new Date(startAt).toLocaleString('tr-TR') : '-'}`
+                              : `${parseInt(dailyLimit).toLocaleString()}'erli / Manuel`
+                          : 'Limitsiz (hemen)'}
+                      </p>
                     </div>
                   </div>
                 </div>

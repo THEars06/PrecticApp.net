@@ -62,6 +62,7 @@ export default function UsersPage() {
       });
       if (res.ok) {
         const data = await res.json();
+
         setRoles(data);
       }
     } catch (error) {
@@ -81,6 +82,7 @@ export default function UsersPage() {
         },
         body: JSON.stringify({ roleId })
       });
+      
       if (res.ok) {
         fetchUsers();
       }
