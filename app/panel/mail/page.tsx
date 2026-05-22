@@ -130,7 +130,7 @@ export default function MailPage() {
   // Infinite scroll — observer'i bir kere kur, callback'i ref ile guncel tut.
   // ESKI KODDA: dep'ler degistikce observer yeniden yaratiliyor, sentinel hala
   // gorunur oldugu icin aninda atesleniyordu → loop davranisi.
-  const loadMoreRef = useRef<() => void>();
+  const loadMoreRef = useRef<(() => void) | null>(null);
   loadMoreRef.current = () => {
     if (!hasMoreUsers || loadingMoreUsers || loadingUsers) return;
     const nextPage = userPage + 1;
