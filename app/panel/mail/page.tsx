@@ -56,11 +56,10 @@ export default function MailPage() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingMoreUsers, setLoadingMoreUsers] = useState(false);
   const [userSearch, setUserSearch] = useState('');
-  // Tümünü Ekle modal
-  const [addAllModal, setAddAllModal] = useState(false);
-  const [addAllProgress, setAddAllProgress] = useState(0);
-  const [addAllTotal, setAddAllTotal] = useState(0);
-  const [addAllDone, setAddAllDone] = useState(false);
+  // "Tum aktif kullanicilar" modu — backend'e selectAll=true yollanir
+  // Frontend 66K user indirmez, sadece toplam sayiyi alir.
+  const [useAllUsers, setUseAllUsers] = useState(false);
+  const [allUsersCount, setAllUsersCount] = useState(0);
   // Scroll ref
   const userListRef = useRef<HTMLDivElement>(null);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
@@ -128,80 +127,58 @@ export default function MailPage() {
     return () => clearTimeout(timer);
   }, [userSearch, fetchUsers]);
 
-  // Infinite scroll — sentinel görününce sonraki sayfa
+  // Infinite scroll — observer'i bir kere kur, callback'i ref ile guncel tut.
+  // ESKI KODDA: dep'ler degistikce observer yeniden yaratiliyor, sentinel hala
+  // gorunur oldugu icin aninda atesleniyordu → loop davranisi.
+  const loadMoreRef = useRef<() => void>();
+  loadMoreRef.current = () => {
+    if (!hasMoreUsers || loadingMoreUsers || loadingUsers) return;
+    const nextPage = userPage + 1;
+    setUserPage(nextPage);
+    fetchUsers(userSearch, nextPage, true);
+  };
+
   useEffect(() => {
     const sentinel = scrollSentinelRef.current;
     const container = userListRef.current;
     if (!sentinel) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMoreUsers && !loadingMoreUsers && !loadingUsers) {
-          const nextPage = userPage + 1;
-          setUserPage(nextPage);
-          fetchUsers(userSearch, nextPage, true);
+        if (entries[0].isIntersecting) {
+          loadMoreRef.current?.();
         }
       },
       { root: container, threshold: 0.1 },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMoreUsers, loadingMoreUsers, loadingUsers, userPage, userSearch, fetchUsers]);
+  }, []);
 
-  // Tümünü Ekle — 100'er 100'er tüm DB'yi çekip ekle
+  // Tum kullanicilari sec — ARTIK browser'a indirmiyoruz!
+  // Sadece toplam sayiyi alip "selectAll" flag'ini set ediyoruz.
+  // Backend mail/send'de DB'den ceker.
   const handleAddAll = async () => {
-    setAddAllModal(true);
-    setAddAllProgress(0);
-    setAddAllDone(false);
-    const token = localStorage.getItem('accessToken');
-
-    // ─── Ayarlar (buradan değiştirebilirsin) ────────────────
-    const BATCH = 5000;     // her istekte çekilecek kullanıcı sayısı
-    const CONCURRENCY = 5;   // aynı anda gönderilecek paralel istek sayısı
-    // ────────────────────────────────────────────────────────
-
-    // 1) Toplam sayıyı öğren
-    const firstRes = await fetch(
-      `${API_URL}/users?search=${encodeURIComponent(userSearch)}&limit=1&page=1`,
-      { headers: { 'Authorization': `Bearer ${token}` } },
-    );
-    if (!firstRes.ok) { setAddAllModal(false); return; }
-    const firstData = await firstRes.json();
-    const total: number = firstData.total ?? 0;
-    setAddAllTotal(total);
-
-    const totalPages = Math.ceil(total / BATCH);
-    const allCollected: User[] = [];
-
-    // 2) Tüm sayfaları çek — CONCURRENCY kadar paralel, state'e DOKUNMA
-    for (let start = 1; start <= totalPages; start += CONCURRENCY) {
-      const pageGroup = Array.from(
-        { length: Math.min(CONCURRENCY, totalPages - start + 1) },
-        (_, i) => start + i,
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(
+        `${API_URL}/users/count?search=${encodeURIComponent(userSearch)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
       );
-
-      const results = await Promise.all(
-        pageGroup.map(p =>
-          fetch(`${API_URL}/users?search=${encodeURIComponent(userSearch)}&limit=${BATCH}&page=${p}`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          }).then(r => r.ok ? r.json() : null),
-        ),
-      );
-
-      for (const d of results) {
-        if (d?.data) allCollected.push(...d.data);
+      if (res.ok) {
+        const data = await res.json();
+        setAllUsersCount(data.total ?? 0);
+        setUseAllUsers(true);
+        // Tek tek secilmis kullanicilari da temizleyelim, ikisi karismasin
+        setSelectedUsers([]);
       }
-
-      // Sadece progress bar güncelle, re-render yok
-      setAddAllProgress(allCollected.length);
+    } catch (error) {
+      console.error('Tum kullanici sayimi alinamadi:', error);
     }
+  };
 
-    // 3) TEK seferde state'e yaz — email bazlı deduplicate
-    setSelectedUsers(prev => {
-      const seen = new Set(prev.map(u => u.email.toLowerCase()));
-      const unique = allCollected.filter(u => !seen.has(u.email.toLowerCase()));
-      return [...prev, ...unique];
-    });
-    setAddAllDone(true);
+  const clearAllUsers = () => {
+    setUseAllUsers(false);
+    setAllUsersCount(0);
   };
 
   // Şablonları ve provider'ları çek
@@ -324,7 +301,10 @@ export default function MailPage() {
   const filteredUsers = userList.filter(
     (u) => !selectedEmails.includes(u.email.toLowerCase())
   );
-  const totalUsers = selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
+  // useAllUsers aktif ise backend tum kullanicilari ceker — sayim olarak goster
+  const totalUsers = useAllUsers
+    ? allUsersCount + selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0)
+    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
 
   const handleDragStart = (campaign: Campaign) => {
     setDraggedCampaign(campaign);
@@ -375,22 +355,35 @@ export default function MailPage() {
 
   const handleSend = async () => {
     if (!selectedTemplate || !selectedProvider) return;
-    
+
     setSending(true);
     try {
       const token = localStorage.getItem('accessToken');
-      const recipientEmails = selectedUsers.map(u => u.email);
-      
+
       const body: any = {
         subject,
-        recipients: recipientEmails,
         templateId: selectedTemplate,
         providerId: selectedProvider,
         platform: selectedPlatform,
       };
 
+      // selectAll modu: backend tum kullanicilari ceker — frontend liste yollamaz
+      if (useAllUsers) {
+        body.selectAll = true;
+        body.audienceFilters = { isActive: true };
+        if (selectedPlatform) {
+          body.audienceFilters.platform = selectedPlatform;
+        }
+      } else {
+        body.recipients = selectedUsers.map((u) => u.email);
+      }
+
+      const effectiveRecipientCount = useAllUsers
+        ? allUsersCount
+        : (body.recipients?.length ?? 0);
+
       const limitNum = parseInt(dailyLimit);
-      if (limitNum > 0 && limitNum < recipientEmails.length) {
+      if (limitNum > 0 && limitNum < effectiveRecipientCount) {
         body.dailyLimit = limitNum;
         body.scheduleMode = scheduleMode;
 
@@ -446,6 +439,8 @@ export default function MailPage() {
         setCurrentStep(1);
         setSelectedCampaigns([]);
         setSelectedUsers([]);
+        setUseAllUsers(false);
+        setAllUsersCount(0);
         setSubject('');
         setSelectedTemplate(null);
         setDailyLimit('');
@@ -466,58 +461,6 @@ export default function MailPage() {
 
   return (
     <div className="space-y-6">
-
-      {/* ─── Tümünü Ekle Modal ─── */}
-      {addAllModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
-            <div className="flex flex-col items-center gap-4">
-              {!addAllDone ? (
-                <>
-                  <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center">
-                    <svg className="animate-spin h-7 w-7 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Kullanıcılar Ekleniyor</h3>
-                  <p className="text-sm text-gray-500 text-center">
-                    {addAllProgress.toLocaleString()} / {addAllTotal.toLocaleString()} kullanıcı eklendi
-                  </p>
-                  {/* Progress bar */}
-                  <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                      style={{ width: addAllTotal > 0 ? `${Math.min((addAllProgress / addAllTotal) * 100, 100)}%` : '0%' }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    %{addAllTotal > 0 ? Math.round((addAllProgress / addAllTotal) * 100) : 0} tamamlandı
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900">Tamamlandı!</h3>
-                  <p className="text-sm text-gray-500 text-center">
-                    <span className="font-semibold text-gray-700">{addAllProgress.toLocaleString()}</span> kullanıcı başarıyla eklendi.
-                  </p>
-                  <button
-                    onClick={() => setAddAllModal(false)}
-                    className="mt-2 px-6 py-2.5 bg-[#2b2973] text-white rounded-xl font-medium hover:bg-[#1e1f5e] transition-colors"
-                  >
-                    Kapat
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -824,13 +767,40 @@ export default function MailPage() {
                     {userTotal > 0 && (
                       <span className="ml-2 text-xs text-gray-400">{userTotal.toLocaleString()} kullanıcı</span>
                     )}
-                    <button
-                      onClick={handleAddAll}
-                      className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
-                    >
-                      Tümünü Ekle
-                    </button>
+                    {!useAllUsers ? (
+                      <button
+                        onClick={handleAddAll}
+                        className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                      >
+                        Tümünü Ekle
+                      </button>
+                    ) : (
+                      <button
+                        onClick={clearAllUsers}
+                        className="ml-auto text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                      >
+                        Tümünü Kaldır
+                      </button>
+                    )}
                   </h3>
+
+                  {useAllUsers && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-sm">
+                        <p className="font-medium text-blue-900">
+                          Tüm aktif kullanıcılar seçili ({allUsersCount.toLocaleString('tr-TR')} kişi)
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          Listeyi browser'a indirmiyoruz. Backend göndereceğin anda DB'den çeker.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   
                   {/* Arama Kutusu */}
                   <div className="relative">
