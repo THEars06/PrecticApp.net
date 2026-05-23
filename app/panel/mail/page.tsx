@@ -346,7 +346,7 @@ export default function MailPage() {
   const canProceed = () => {
     switch (currentStep) {
       case 1: return selectedPlatform !== null;
-      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0;
+      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0 || (useAllUsers && allUsersCount > 0);
       case 3: return selectedTemplate !== null && subject.trim() !== '';
       case 4: return selectedProvider !== null;
       default: return false;
