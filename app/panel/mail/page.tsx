@@ -168,8 +168,10 @@ export default function MailPage() {
         const data = await res.json();
         setAllUsersCount(data.total ?? 0);
         setUseAllUsers(true);
-        // Tek tek secilmis kullanicilari da temizleyelim, ikisi karismasin
+        // Tum kullanicilar modu tek basina calissin; kampanya/tekil secimler karismasin.
         setSelectedUsers([]);
+        setSelectedCampaigns([]);
+        setCampaignUsers({});
       }
     } catch (error) {
       console.error('Tum kullanici sayimi alinamadi:', error);
@@ -303,7 +305,7 @@ export default function MailPage() {
   );
   // useAllUsers aktif ise backend tum kullanicilari ceker — sayim olarak goster
   const totalUsers = useAllUsers
-    ? allUsersCount + selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0)
+    ? allUsersCount
     : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
 
   const handleDragStart = (campaign: Campaign) => {
@@ -346,7 +348,7 @@ export default function MailPage() {
   const canProceed = () => {
     switch (currentStep) {
       case 1: return selectedPlatform !== null;
-      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0;
+      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0 || (useAllUsers && allUsersCount > 0);
       case 3: return selectedTemplate !== null && subject.trim() !== '';
       case 4: return selectedProvider !== null;
       default: return false;
@@ -667,7 +669,7 @@ export default function MailPage() {
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                     Seçilen Havuz
-                    {(selectedCampaigns.length > 0 || selectedUsers.length > 0) && (
+                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0) && (
                       <>
                         <span className="text-xs text-green-600 font-semibold">
                           {totalUsers.toLocaleString()} kullanıcı
@@ -677,6 +679,8 @@ export default function MailPage() {
                             setSelectedCampaigns([]);
                             setSelectedUsers([]);
                             setCampaignUsers({});
+                            setUseAllUsers(false);
+                            setAllUsersCount(0);
                           }}
                           className="ml-auto text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
                         >
@@ -695,7 +699,7 @@ export default function MailPage() {
                       draggedCampaign ? 'border-green-400 bg-green-100' : 'border-green-200'
                     }`}
                   >
-                    {selectedCampaigns.length === 0 && selectedUsers.length === 0 ? (
+                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-green-600">
                         <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -704,6 +708,16 @@ export default function MailPage() {
                       </div>
                     ) : (
                       <div className="space-y-2">
+                        {useAllUsers && (
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                            <p className="text-sm font-medium text-blue-900">
+                              Tüm aktif kullanıcılar seçili
+                            </p>
+                            <p className="text-xs text-blue-700">
+                              {allUsersCount.toLocaleString('tr-TR')} kullanıcı backend tarafından gönderim anında çekilecek.
+                            </p>
+                          </div>
+                        )}
                         {/* Seçilen Kullanıcılar */}
                         {selectedUsers.length > 0 && (
                           <div className="mb-3">
