@@ -1,0 +1,150 @@
+'use client';
+
+/* eslint-disable @next/next/no-img-element */
+import { DragEvent, useRef, useState } from 'react';
+import { GalleryBlock as GalleryBlockType } from '../types';
+import { useTemplate2Store } from '../store';
+import { uploadImage } from '../uploadImage';
+import BlockFrame from './BlockFrame';
+
+export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const applyFile = async (imageId: string, file: File) => {
+    setUploadingId(imageId);
+    setError('');
+    try {
+      const url = await uploadImage(file);
+      updateBlock(block.id, (current) =>
+        current.type === 'gallery'
+          ? {
+              ...current,
+              content: {
+                images: current.content.images.map((image) => (image.id === imageId ? { ...image, src: url } : image)),
+              },
+            }
+          : current,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Görsel yüklenemedi.');
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
+  const onDrop = (event: DragEvent<HTMLDivElement>, imageId: string) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files.item(0);
+    if (file) void applyFile(imageId, file);
+  };
+
+  return (
+    <BlockFrame id={block.id} label="Yan Yana Görsel">
+      <div style={{ padding: block.style.padding }}>
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: `repeat(${block.style.columns}, minmax(0, 1fr))`,
+            gap: block.style.gap,
+            textAlign: block.style.align,
+          }}
+        >
+          {block.content.images.slice(0, block.style.columns).map((image, index) => (
+            <div key={image.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => onDrop(event, image.id)}>
+              {image.src ? (
+                <img
+                  src={image.src}
+                  alt={image.alt}
+                  style={{
+                    width: image.width || block.style.imageWidth,
+                    maxWidth: '100%',
+                    borderRadius: block.style.borderRadius,
+                    display: 'inline-block',
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => inputRefs.current[image.id]?.click()}
+                  className="min-h-32 w-full rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm text-gray-500 hover:border-[#2b2973] hover:bg-purple-50"
+                >
+                  {uploadingId === image.id ? 'Yükleniyor...' : `Görsel ${index + 1}`}
+                </button>
+              )}
+              <div
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'gallery'
+                      ? {
+                          ...current,
+                          content: {
+                            images: current.content.images.map((item) =>
+                              item.id === image.id ? { ...item, caption: event.currentTarget.textContent || '' } : item,
+                            ),
+                          },
+                        }
+                      : current,
+                  )
+                }
+                className="mt-2 min-h-5 outline-none"
+                style={{ color: block.style.captionColor, fontSize: block.style.captionFontSize }}
+              >
+                {image.caption || 'Alt yazı'}
+              </div>
+              <div className="mt-2 flex justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => inputRefs.current[image.id]?.click()}
+                  className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Değiştir
+                </button>
+                {image.src ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateBlock(block.id, (current) =>
+                        current.type === 'gallery'
+                          ? {
+                              ...current,
+                              content: {
+                                images: current.content.images.map((item) =>
+                                  item.id === image.id ? { ...item, src: '' } : item,
+                                ),
+                              },
+                            }
+                          : current,
+                      )
+                    }
+                    className="rounded-lg border border-red-100 px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Kaldır
+                  </button>
+                ) : null}
+              </div>
+              <input
+                ref={(element) => {
+                  inputRefs.current[image.id] = element;
+                }}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void applyFile(image.id, file);
+                  event.currentTarget.value = '';
+                }}
+              />
+            </div>
+          ))}
+        </div>
+        {error ? <p className="mt-2 text-center text-xs text-red-500">{error}</p> : null}
+      </div>
+    </BlockFrame>
+  );
+}
