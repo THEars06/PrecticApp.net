@@ -1,4 +1,4 @@
-import { MailTemplate, TemplateDesign, TemplateMeta } from './types';
+import { MailTemplate, TemplateDesign, TemplateMeta, DeviceMode } from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 
@@ -45,11 +45,11 @@ export async function saveTemplate2(input: {
   return parseOrThrow<MailTemplate>(response);
 }
 
-export async function previewTemplate2(design: TemplateDesign): Promise<string> {
+export async function previewTemplate2(design: TemplateDesign, viewport: DeviceMode = 'desktop'): Promise<string> {
   const response = await fetch(`${API_URL}/templates/preview`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ designJson: design }),
+    body: JSON.stringify({ designJson: design, viewport }),
   });
   const payload = await parseOrThrow<{ html: string }>(response);
   return payload.html;

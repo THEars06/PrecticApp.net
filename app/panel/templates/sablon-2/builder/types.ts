@@ -3,6 +3,7 @@ export type LinkTarget = '_blank' | '_self';
 export type DeviceMode = 'desktop' | 'mobile';
 export type PresetId = 'blank' | 'newsletter' | 'campaign' | 'welcome' | 'discount' | 'announcement';
 export type GalleryColumns = 2 | 3 | 4 | 5;
+export type MobileGalleryColumns = 1 | 2 | 3;
 
 export type TemplateMeta = {
   name: string;
@@ -48,13 +49,21 @@ export type GalleryImage = {
   width?: string;
   caption?: string;
   link?: string;
+  showButton?: boolean;
+  buttonText?: string;
+  buttonUrl?: string;
+  buttonTarget?: LinkTarget;
 };
 
 export type GalleryBlock = BaseBlock & {
   type: 'gallery';
-  content: { images: GalleryImage[] };
+  content: {
+    images: GalleryImage[];
+    showButtons?: boolean;
+  };
   style: {
     columns: GalleryColumns;
+    mobileColumns?: MobileGalleryColumns;
     gap: string;
     imageWidth: string;
     align: TextAlign;
@@ -62,6 +71,11 @@ export type GalleryBlock = BaseBlock & {
     padding: string;
     captionColor: string;
     captionFontSize: string;
+    buttonBg: string;
+    buttonColor: string;
+    buttonRadius: string;
+    buttonFontSize: string;
+    buttonPadding: string;
   };
 };
 
