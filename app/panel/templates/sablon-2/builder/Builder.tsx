@@ -25,6 +25,7 @@ export default function Builder({ templateId, draftKey }: Props) {
   const router = useRouter();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const meta = useTemplate2Store((state) => state.meta);
+  const setMeta = useTemplate2Store((state) => state.setMeta);
   const design = useTemplate2Store((state) => state.design);
   const addBlock = useTemplate2Store((state) => state.addBlock);
   const moveBlock = useTemplate2Store((state) => state.moveBlock);
@@ -37,6 +38,7 @@ export default function Builder({ templateId, draftKey }: Props) {
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [infoModal, setInfoModal] = useState(false);
   const mountedRef = useRef(false);
 
   useEffect(() => {
@@ -111,10 +113,20 @@ export default function Builder({ templateId, draftKey }: Props) {
   return (
     <div className="flex h-[calc(100vh-180px)] min-h-[560px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4">
-        <div>
-          <div className="text-sm font-bold text-gray-900">{meta.name || 'Şablon 2'}</div>
-          <div className="text-xs text-gray-500">{meta.subject || 'Konu girilmedi'}</div>
-        </div>
+        <button
+          type="button"
+          onClick={() => setInfoModal(true)}
+          className="group flex items-center gap-2 rounded-lg px-2 py-1 text-left hover:bg-gray-50"
+          title="Mail bilgilerini düzenle"
+        >
+          <div>
+            <div className="text-sm font-bold text-gray-900">{meta.name || 'Şablon 2'}</div>
+            <div className="text-xs text-gray-500">{meta.subject || 'Konu girilmedi'}</div>
+          </div>
+          <svg className="h-4 w-4 text-gray-400 group-hover:text-[#2b2973]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
         <div className="flex items-center gap-2">
           <button type="button" onClick={undo} className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
             Geri Al
@@ -159,6 +171,59 @@ export default function Builder({ templateId, draftKey }: Props) {
           <Inspector />
         </div>
       </DndContext>
+
+      {infoModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <h3 className="text-base font-bold text-gray-900">Mail Bilgileri</h3>
+              <button type="button" onClick={() => setInfoModal(false)} className="rounded-lg px-2 py-1 text-sm text-gray-500 hover:bg-gray-100">
+                Kapat
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-gray-700">Şablon Adı *</span>
+                <input
+                  value={meta.name}
+                  onChange={(event) => setMeta({ name: event.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]"
+                  placeholder="Örn: Mayıs Kampanyası"
+                  autoFocus
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Konusu</span>
+                <input
+                  value={meta.subject}
+                  onChange={(event) => setMeta({ subject: event.target.value })}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]"
+                  placeholder="Örn: Sana özel fırsatlar"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-gray-700">Açıklama</span>
+                <textarea
+                  value={meta.description}
+                  onChange={(event) => setMeta({ description: event.target.value })}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]"
+                  placeholder="Bu şablon ne için kullanılacak?"
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setInfoModal(false)}
+                className="rounded-xl bg-[#2b2973] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#1f1d5c]"
+              >
+                Tamam
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {previewHtml ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

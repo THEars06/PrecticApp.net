@@ -5,11 +5,13 @@ import { DragEvent, useRef, useState } from 'react';
 import { ProductBlock as ProductBlockType } from '../types';
 import { useTemplate2Store } from '../store';
 import { uploadImage } from '../uploadImage';
+import { mobileButtonFont, mobileButtonPadding } from '../mobileButtonScale';
 import BlockFrame from './BlockFrame';
 
 export default function ProductBlock({ block }: { block: ProductBlockType }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const device = useTemplate2Store((state) => state.deviceMode);
   const [uploading, setUploading] = useState(false);
 
   const applyFile = async (file: File) => {
@@ -32,7 +34,7 @@ export default function ProductBlock({ block }: { block: ProductBlockType }) {
 
   return (
     <BlockFrame id={block.id} label="Ürün Kartı">
-      <div className="px-6 py-4">
+      <div className={device === 'mobile' ? 'px-2 py-3' : 'px-6 py-4'}>
         <div
           onDragOver={(event) => event.preventDefault()}
           onDrop={onDrop}
@@ -50,7 +52,7 @@ export default function ProductBlock({ block }: { block: ProductBlockType }) {
                 src={block.content.image}
                 alt=""
                 className="mx-auto max-h-56 max-w-full rounded-xl object-cover"
-                style={{ width: block.style.imageWidth || '100%' }}
+                style={{ width: device === 'mobile' ? '100%' : block.style.imageWidth || '100%' }}
               />
               <div className="mt-3 flex justify-center gap-2">
                 <button
@@ -124,8 +126,13 @@ export default function ProductBlock({ block }: { block: ProductBlockType }) {
             {block.content.price}
           </div>
           <span
-            className="mt-4 inline-block rounded-lg px-5 py-3 text-sm font-bold"
-            style={{ background: block.style.buttonBg, color: block.style.buttonColor }}
+            className="mt-4 inline-block rounded-lg font-bold"
+            style={{
+              background: block.style.buttonBg,
+              color: block.style.buttonColor,
+              padding: mobileButtonPadding('12px 20px', device),
+              fontSize: mobileButtonFont('14px', device),
+            }}
           >
             {block.content.buttonText}
           </span>

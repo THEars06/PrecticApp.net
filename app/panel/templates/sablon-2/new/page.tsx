@@ -45,7 +45,6 @@ function AppearanceColorInput({
 
 export default function NewTemplate2Page() {
   const resetFromPreset = useTemplate2Store((state) => state.resetFromPreset);
-  const loadDesign = useTemplate2Store((state) => state.loadDesign);
   const [step, setStep] = useState<'wizard' | 'editor'>('wizard');
   const [meta, setMeta] = useState<TemplateMeta>({ name: '', subject: '', description: '' });
   const [settings, setSettings] = useState<TemplateSettings>(defaultSettings);
@@ -54,16 +53,14 @@ export default function NewTemplate2Page() {
   const [uploadingBg, setUploadingBg] = useState(false);
 
   useEffect(() => {
-    const raw = localStorage.getItem(draftKey);
-    if (!raw) return;
-    try {
-      const draft = JSON.parse(raw) as { meta?: TemplateMeta; design?: ReturnType<typeof useTemplate2Store.getState>['design'] };
-      if (draft.meta && draft.design) {
-        loadDesign(draft.design, draft.meta);
-        setStep('editor');
-      }
-    } catch {}
-  }, [loadDesign]);
+    // Her açılışta temiz başla: eski taslağı temizle ve store'u sıfırla.
+    localStorage.removeItem(draftKey);
+    resetFromPreset('blank', defaultSettings, { name: '', subject: '', description: '' });
+    setStep('wizard');
+    setMeta({ name: '', subject: '', description: '' });
+    setSettings(defaultSettings);
+    setPreset('blank');
+  }, [resetFromPreset]);
 
   const handleStart = () => {
     const validation = validateMeta(meta);

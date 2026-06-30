@@ -5,11 +5,13 @@ import { DragEvent, useRef, useState } from 'react';
 import { HeroBlock as HeroBlockType } from '../types';
 import { useTemplate2Store } from '../store';
 import { uploadImage } from '../uploadImage';
+import { mobileButtonFont, mobileButtonPadding } from '../mobileButtonScale';
 import BlockFrame from './BlockFrame';
 
 export default function HeroBlock({ block }: { block: HeroBlockType }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const device = useTemplate2Store((state) => state.deviceMode);
   const [uploading, setUploading] = useState(false);
 
   const applyFile = async (file: File) => {
@@ -35,7 +37,7 @@ export default function HeroBlock({ block }: { block: HeroBlockType }) {
       <div
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
-        className="m-6 overflow-hidden rounded-2xl"
+        className={`overflow-hidden rounded-2xl ${device === 'mobile' ? 'm-2' : 'm-6'}`}
         style={{ background: block.style.bgColor, borderRadius: block.style.borderRadius }}
       >
         {block.content.image ? (
@@ -45,7 +47,7 @@ export default function HeroBlock({ block }: { block: HeroBlockType }) {
                 src={block.content.image}
                 alt=""
                 className="h-auto max-w-full"
-                style={{ width: block.style.imageWidth || '100%', display: 'inline-block' }}
+                style={{ width: device === 'mobile' ? '100%' : block.style.imageWidth || '100%', display: 'inline-block' }}
               />
             </div>
             <div className="flex justify-center gap-2 border-b border-black/5 bg-white/60 px-4 py-3">
@@ -108,7 +110,13 @@ export default function HeroBlock({ block }: { block: HeroBlockType }) {
             {block.content.subtitle || 'Alt açıklama'}
           </div>
           {block.content.buttonText ? (
-            <span className="mt-5 inline-block rounded-lg bg-[#2b2973] px-5 py-3 text-sm font-bold text-white">
+            <span
+              className="mt-5 inline-block rounded-lg bg-[#2b2973] font-bold text-white"
+              style={{
+                padding: mobileButtonPadding('12px 20px', device),
+                fontSize: mobileButtonFont('14px', device),
+              }}
+            >
               {block.content.buttonText}
             </span>
           ) : null}

@@ -11,6 +11,7 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   const addButtonBelow = useTemplate2Store((state) => state.addButtonBelow);
+  const device = useTemplate2Store((state) => state.deviceMode);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,8 +41,11 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
       <div
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
-        className="px-6 py-4"
-        style={{ textAlign: block.style.align, padding: block.style.padding }}
+        className={device === 'mobile' ? 'px-2 py-3' : 'px-6 py-4'}
+        style={{
+          textAlign: block.style.align,
+          padding: device === 'mobile' ? '8px 8px' : block.style.padding,
+        }}
       >
         {block.content.src ? (
           <>
@@ -49,7 +53,7 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
               src={block.content.src}
               alt={block.content.alt}
               style={{
-                width: block.style.width,
+                width: device === 'mobile' ? '100%' : block.style.width,
                 maxWidth: '100%',
                 borderRadius: block.style.borderRadius,
                 display: 'inline-block',

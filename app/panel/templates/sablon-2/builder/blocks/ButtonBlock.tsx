@@ -2,14 +2,16 @@
 
 import { ButtonBlock as ButtonBlockType } from '../types';
 import { useTemplate2Store } from '../store';
+import { mobileButtonFont, mobileButtonPadding } from '../mobileButtonScale';
 import BlockFrame from './BlockFrame';
 
 export default function ButtonBlock({ block }: { block: ButtonBlockType }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const device = useTemplate2Store((state) => state.deviceMode);
 
   return (
     <BlockFrame id={block.id} label="Buton">
-      <div className="px-6 py-4" style={{ textAlign: block.style.align }}>
+      <div className={device === 'mobile' ? 'px-2 py-3' : 'px-6 py-4'} style={{ textAlign: block.style.align }}>
         <a
           href={block.content.url || '#'}
           target={block.content.target}
@@ -30,8 +32,8 @@ export default function ButtonBlock({ block }: { block: ButtonBlockType }) {
             background: block.style.bg,
             color: block.style.color,
             borderRadius: block.style.borderRadius,
-            padding: block.style.padding,
-            fontSize: block.style.fontSize,
+            padding: mobileButtonPadding(block.style.padding, device),
+            fontSize: mobileButtonFont(block.style.fontSize, device),
             textDecoration: 'none',
             fontWeight: 700,
             boxSizing: 'border-box',
