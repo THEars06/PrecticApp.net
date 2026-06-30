@@ -436,8 +436,9 @@ export default function TemplateEditor({
     const bodyRaw = bodyMatch ? bodyMatch[1] : rawHtml;
 
     const wrapper = editor.getWrapper();
-    const wrapperStyle = wrapper?.getStyle() || {};
-    const bodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
+    const wrapperStyle = (wrapper?.getStyle() || {}) as Record<string, unknown>;
+    const rawBodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
+    const bodyBg = Array.isArray(rawBodyBg) ? String(rawBodyBg[0] ?? '#ffffff') : String(rawBodyBg);
 
     const bodyContent = inlineCssIntoHtml(bodyRaw, css);
     const fullHtml = buildEmailDocument(bodyContent, css, bodyBg);
@@ -503,8 +504,9 @@ export default function TemplateEditor({
     const inlined = inlineCssIntoHtml(bodyRaw, css);
 
     const wrapper = editor.getWrapper();
-    const wrapperStyle = wrapper?.getStyle() || {};
-    const bodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
+    const wrapperStyle = (wrapper?.getStyle() || {}) as Record<string, unknown>;
+    const rawBodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
+    const bodyBg = Array.isArray(rawBodyBg) ? String(rawBodyBg[0] ?? '#ffffff') : String(rawBodyBg);
     const previewWidth = PREVIEW_WIDTHS[activeDevice];
     const html = buildEmailDocument(inlined, css, bodyBg, previewWidth);
 
