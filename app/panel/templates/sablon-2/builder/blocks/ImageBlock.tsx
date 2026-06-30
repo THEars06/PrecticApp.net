@@ -10,6 +10,7 @@ import BlockFrame from './BlockFrame';
 export default function ImageBlock({ block }: { block: ImageBlockType }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const addButtonBelow = useTemplate2Store((state) => state.addButtonBelow);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
@@ -81,7 +82,7 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
             {uploading ? 'Yükleniyor...' : 'Görseli buraya sürükle veya seç'}
           </button>
         )}
-        <div className="mt-3 flex justify-center gap-2">
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
@@ -90,17 +91,26 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
             {block.content.src ? 'Görsel Değiştir' : 'Görsel Seç'}
           </button>
           {block.content.src ? (
-            <button
-              type="button"
-              onClick={() =>
-                updateBlock(block.id, (current) =>
-                  current.type === 'image' ? { ...current, content: { ...current.content, src: '' } } : current,
-                )
-              }
-              className="rounded-lg border border-red-100 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-            >
-              Görseli Kaldır
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => addButtonBelow(block.id)}
+                className="rounded-lg border border-[#2b2973]/30 bg-[#2b2973]/5 px-3 py-1.5 text-xs font-semibold text-[#2b2973] hover:bg-[#2b2973]/10"
+              >
+                Altına Buton Ekle
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'image' ? { ...current, content: { ...current.content, src: '' } } : current,
+                  )
+                }
+                className="rounded-lg border border-red-100 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+              >
+                Görseli Kaldır
+              </button>
+            </>
           ) : null}
         </div>
         {error ? <p className="mt-2 text-center text-xs text-red-500">{error}</p> : null}

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { createBlock, createDesignFromPreset, defaultSettings } from './presets';
-import { BlockType, PresetId, TemplateBlock, TemplateDesign, TemplateMeta, TemplateSettings } from './types';
+import { BlockType, DeviceMode, PresetId, TemplateBlock, TemplateDesign, TemplateMeta, TemplateSettings } from './types';
 
 const emptyMeta: TemplateMeta = {
   name: '',
@@ -60,6 +60,7 @@ type BuilderState = {
   loadDesign: (design: TemplateDesign, meta?: Partial<TemplateMeta>) => void;
   resetFromPreset: (preset: PresetId, settings?: TemplateSettings, meta?: Partial<TemplateMeta>) => void;
   addBlock: (type: BlockType, index?: number) => void;
+  addButtonBelow: (blockId: string) => void;
   moveBlock: (activeId: string, overId: string) => void;
   moveBlockByOffset: (id: string, offset: -1 | 1) => void;
   updateBlock: (id: string, updater: (block: TemplateBlock) => TemplateBlock) => void;
@@ -69,6 +70,8 @@ type BuilderState = {
   undo: () => void;
   redo: () => void;
   selectedBlock: () => TemplateBlock | null;
+  deviceMode: DeviceMode;
+  setDeviceMode: (mode: DeviceMode) => void;
 };
 
 export const useTemplate2Store = create<BuilderState>((set, get) => {
@@ -121,6 +124,15 @@ export const useTemplate2Store = create<BuilderState>((set, get) => {
       const insertAt = typeof index === 'number' ? Math.max(0, Math.min(index, blocks.length)) : blocks.length;
       blocks.splice(insertAt, 0, block);
       commit({ ...get().design, blocks }, block.id);
+    },
+
+    addButtonBelow: (blockId) => {
+      const blocks = [...get().design.blocks];
+      const index = blocks.findIndex((block) => block.id === blockId);
+      if (index < 0) return;
+      const button = createBlock('button');
+      blocks.splice(index + 1, 0, button);
+      commit({ ...get().design, blocks }, button.id);
     },
 
     moveBlock: (activeId, overId) => {
@@ -188,5 +200,8 @@ export const useTemplate2Store = create<BuilderState>((set, get) => {
     },
 
     selectedBlock: () => findBlock(get().design.blocks, get().selectedId),
+
+    deviceMode: 'desktop',
+    setDeviceMode: (mode) => set({ deviceMode: mode }),
   };
 });

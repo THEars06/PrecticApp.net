@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
 // Mock kampanya verileri (sadece gise için - kupon gerçek API'den gelecek)
@@ -14,6 +15,9 @@ const mockCampaigns = {
     { id: '6', name: 'Bale Gösterisi', userCount: 780 },
   ],
 };
+
+const DEFAULT_BATCH_LIMIT = 10000;
+const DEFAULT_INTERVAL_HOURS = '0.5';
 
 type User = {
   id: string;
@@ -38,7 +42,16 @@ type Platform = 'gise' | 'kupon' | null;
 type Campaign = { id: string; name: string; userCount: number };
 type MailProviderType = { id: string; name: string; type: string; isDefault: boolean };
 
+type SendResultModal = {
+  type: 'success' | 'error';
+  title: string;
+  lines?: string[];
+  message?: string;
+  logId?: string;
+};
+
 export default function MailPage() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(null);
   const [subject, setSubject] = useState('');
@@ -69,6 +82,7 @@ export default function MailPage() {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   // Mail gönderimi
   const [sending, setSending] = useState(false);
+  const [sendResultModal, setSendResultModal] = useState<SendResultModal | null>(null);
   const [mailProviders, setMailProviders] = useState<MailProviderType[]>([]);
   // Kampanya verileri (kupon için gerçek API'den)
   const [kuponCampaigns, setKuponCampaigns] = useState<Campaign[]>([]);
@@ -77,8 +91,9 @@ export default function MailPage() {
   // Kampanyadan gelen kullanıcılar
   const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
   // Gunluk limit ve aralik
+  const [schedulingExtraOpen, setSchedulingExtraOpen] = useState(false);
   const [dailyLimit, setDailyLimit] = useState<string>('');
-  const [intervalHours, setIntervalHours] = useState<string>('24');
+  const [intervalHours, setIntervalHours] = useState<string>(DEFAULT_INTERVAL_HOURS);
   const [scheduleMode, setScheduleMode] = useState<'immediate' | 'startDate' | 'manual'>('immediate');
   const [startAt, setStartAt] = useState<string>('');
   const [manualSchedules, setManualSchedules] = useState<string[]>([]);
@@ -384,25 +399,30 @@ export default function MailPage() {
         ? allUsersCount
         : (body.recipients?.length ?? 0);
 
-      const limitNum = parseInt(dailyLimit);
+      const limitNum = schedulingExtraOpen
+        ? parseInt(dailyLimit)
+        : DEFAULT_BATCH_LIMIT;
+      const effectiveScheduleMode = schedulingExtraOpen ? scheduleMode : 'immediate';
+      const effectiveIntervalHours = schedulingExtraOpen ? intervalHours : DEFAULT_INTERVAL_HOURS;
+
       if (limitNum > 0 && limitNum < effectiveRecipientCount) {
         body.dailyLimit = limitNum;
-        body.scheduleMode = scheduleMode;
+        body.scheduleMode = effectiveScheduleMode;
 
-        if (scheduleMode === 'immediate') {
-          const intervalNum = parseFloat(intervalHours);
+        if (effectiveScheduleMode === 'immediate') {
+          const intervalNum = parseFloat(effectiveIntervalHours);
           if (intervalNum > 0) {
             body.intervalHours = intervalNum;
           }
-        } else if (scheduleMode === 'startDate') {
+        } else if (effectiveScheduleMode === 'startDate') {
           if (startAt) {
             body.startAt = new Date(startAt).toISOString();
           }
-          const intervalNum = parseFloat(intervalHours);
+          const intervalNum = parseFloat(effectiveIntervalHours);
           if (intervalNum > 0) {
             body.intervalHours = intervalNum;
           }
-        } else if (scheduleMode === 'manual') {
+        } else if (effectiveScheduleMode === 'manual') {
           body.scheduleTimes = manualSchedules
             .filter(dt => dt)
             .map(dt => new Date(dt).toISOString());
@@ -421,23 +441,25 @@ export default function MailPage() {
       const result = await response.json();
       
       if (response.ok) {
-        let msg = `Toplam: ${result.totalRecipients}`;
+        const lines: string[] = [`Toplam alıcı: ${result.totalRecipients}`];
+        if (result.excludedUnsubscribed > 0) {
+          lines.push(`Abonelikten çıkan (hariç tutulan): ${result.excludedUnsubscribed}`);
+        }
         if (result.sentNow > 0) {
-          msg += `\nHemen gönderilen: ${result.sentNow}`;
-          msg += `\nBaşarılı: ${result.successCount}`;
-          msg += `\nBaşarısız: ${result.failCount}`;
+          lines.push(`Hemen gönderilen: ${result.sentNow}`);
+          lines.push(`Başarılı: ${result.successCount}`);
+          lines.push(`Başarısız: ${result.failCount}`);
         }
         if (result.queued > 0 && result.schedule?.length > 0) {
-          msg += `\n\nKuyrukta bekleyen: ${result.queued}`;
-          msg += `\nZamanlanan batch sayısı: ${result.schedule.length}`;
+          lines.push(`Kuyrukta bekleyen: ${result.queued}`);
+          lines.push(`Zamanlanan batch sayısı: ${result.schedule.length}`);
           const nextDate = new Date(result.schedule[0].scheduledAt);
-          msg += `\nİlk zamanlanmış gönderim: ${nextDate.toLocaleString('tr-TR')}`;
+          lines.push(`İlk zamanlanmış gönderim: ${nextDate.toLocaleString('tr-TR')}`);
           if (result.schedule.length > 1) {
             const lastDate = new Date(result.schedule[result.schedule.length - 1].scheduledAt);
-            msg += `\nSon gönderim: ${lastDate.toLocaleString('tr-TR')}`;
+            lines.push(`Son gönderim: ${lastDate.toLocaleString('tr-TR')}`);
           }
         }
-        alert(msg);
         setCurrentStep(1);
         setSelectedCampaigns([]);
         setSelectedUsers([]);
@@ -445,17 +467,32 @@ export default function MailPage() {
         setAllUsersCount(0);
         setSubject('');
         setSelectedTemplate(null);
+        setSchedulingExtraOpen(false);
         setDailyLimit('');
-        setIntervalHours('24');
+        setIntervalHours(DEFAULT_INTERVAL_HOURS);
         setScheduleMode('immediate');
         setStartAt('');
         setManualSchedules([]);
+        setSendResultModal({
+          type: 'success',
+          title: result.queued > 0 ? 'Gönderim Planlandı' : 'Mail Gönderildi',
+          lines,
+          logId: result.logId,
+        });
       } else {
-        alert(`Hata: ${result.message || 'Mail gönderilemedi'}`);
+        setSendResultModal({
+          type: 'error',
+          title: 'Gönderim Başarısız',
+          message: result.message || 'Mail gönderilemedi',
+        });
       }
     } catch (error) {
       console.error('Mail gönderilirken hata:', error);
-      alert('Bir hata oluştu. Lütfen tekrar deneyin.');
+      setSendResultModal({
+        type: 'error',
+        title: 'Hata',
+        message: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+      });
     } finally {
       setSending(false);
     }
@@ -1194,8 +1231,56 @@ export default function MailPage() {
               {selectedProvider && (
                 <div className="mt-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
                   <h3 className="font-semibold text-gray-900 mb-1">Gönderim Zamanlama</h3>
-                  <p className="text-xs text-gray-500 mb-4">Büyük listelerde batch limiti belirleyerek kademeli gönderim yapabilirsiniz. Boş bırakırsanız tümü hemen gönderilir.</p>
-                  
+                  <p className="text-xs text-gray-500 mb-4">
+                    Varsayılan olarak 10.000&apos;erli batch ve 30 dakika aralık uygulanır. Özel ayar için Ekstra&apos;yı açın.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setSchedulingExtraOpen(false)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        !schedulingExtraOpen
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${!schedulingExtraOpen ? 'text-blue-700' : 'text-gray-900'}`}>Tamamı</p>
+                      <p className="text-xs text-gray-500 mt-0.5">10.000 mail / 30 dk aralık</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSchedulingExtraOpen(true);
+                        if (!dailyLimit) setDailyLimit(String(DEFAULT_BATCH_LIMIT));
+                        if (!intervalHours) setIntervalHours(DEFAULT_INTERVAL_HOURS);
+                      }}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        schedulingExtraOpen
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${schedulingExtraOpen ? 'text-blue-700' : 'text-gray-900'}`}>Ekstra</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Limit ve zamanlamayı özelleştir</p>
+                    </button>
+                  </div>
+
+                  {!schedulingExtraOpen ? (
+                    <div className="p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm text-gray-700">
+                          {totalUsers > DEFAULT_BATCH_LIMIT
+                            ? `${DEFAULT_BATCH_LIMIT.toLocaleString()}'erli batch · 30 dakika aralık · İlk batch hemen`
+                            : 'Tüm alıcılar tek seferde gönderilir (10.000 altı)'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                   {/* Batch Limit */}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Batch Başına Limit</label>
@@ -1391,6 +1476,8 @@ export default function MailPage() {
                       })()}
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1418,9 +1505,13 @@ export default function MailPage() {
                     <div>
                       <p className="text-gray-500">Zamanlama</p>
                       <p className="font-medium text-gray-900">
-                        {dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers
+                        {!schedulingExtraOpen
+                          ? totalUsers > DEFAULT_BATCH_LIMIT
+                            ? `${DEFAULT_BATCH_LIMIT.toLocaleString()}'erli / 30 Dakika`
+                            : 'Hemen gönderilir'
+                          : dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers
                           ? scheduleMode === 'immediate'
-                            ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${intervalHours} saat`
+                            ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${intervalHours === '0.5' ? '30 Dakika' : `${intervalHours} saat`}`
                             : scheduleMode === 'startDate'
                               ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${startAt ? new Date(startAt).toLocaleString('tr-TR') : '-'}`
                               : `${parseInt(dailyLimit).toLocaleString()}'erli / Manuel`
@@ -1469,21 +1560,84 @@ export default function MailPage() {
           ) : (
             <button
               onClick={handleSend}
-              disabled={!canProceed()}
+              disabled={!canProceed() || sending}
               className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl transition-all ${
-                canProceed()
+                canProceed() && !sending
                   ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/25'
                   : 'bg-gray-200 text-gray-400 cursor-not-allowed'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              Gönder
+              {sending ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Gönderiliyor...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  Gönder
+                </>
+              )}
             </button>
           )}
         </div>
       </div>
+
+      {/* Gönderim Sonucu Popup */}
+      {sendResultModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+              sendResultModal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+            }`}>
+              {sendResultModal.type === 'success' ? (
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 text-center mb-3">{sendResultModal.title}</h3>
+            {sendResultModal.lines && sendResultModal.lines.length > 0 && (
+              <ul className="space-y-2 mb-6">
+                {sendResultModal.lines.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {sendResultModal.message && (
+              <p className="text-gray-500 text-center text-sm mb-6">{sendResultModal.message}</p>
+            )}
+            <button
+              onClick={() => {
+                const modal = sendResultModal;
+                setSendResultModal(null);
+                if (modal.type === 'success' && modal.logId) {
+                  router.push(`/panel/mail-reports?highlight=${modal.logId}`);
+                }
+              }}
+              className={`w-full px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                sendResultModal.type === 'success'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/25'
+                  : 'bg-red-500 text-white hover:bg-red-600'
+              }`}
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,10 @@ const createGalleryImages = (count: number) =>
     alt: `Görsel ${index + 1}`,
     width: '100%',
     caption: `Açıklama ${index + 1}`,
+    showButton: true,
+    buttonText: 'Tıkla',
+    buttonUrl: 'https://example.com',
+    buttonTarget: '_blank' as const,
   }));
 
 export function createBlock(type: BlockType): TemplateBlock {
@@ -64,6 +68,7 @@ export function createBlock(type: BlockType): TemplateBlock {
         type,
         content: {
           images: createGalleryImages(4),
+          showButtons: true,
         },
         style: {
           columns: 4,
@@ -74,6 +79,11 @@ export function createBlock(type: BlockType): TemplateBlock {
           padding: '12px 24px',
           captionColor: '#6b7280',
           captionFontSize: '13px',
+          buttonBg: '#2b2973',
+          buttonColor: '#ffffff',
+          buttonRadius: '8px',
+          buttonFontSize: '12px',
+          buttonPadding: '8px 12px',
         },
       };
     case 'hero':
@@ -119,7 +129,7 @@ export function createBlock(type: BlockType): TemplateBlock {
           company: 'PrecticApp',
           text: 'Bu e-posta bilgilendirme amacıyla gönderilmiştir.',
           unsubscribeText: 'Abonelikten çık',
-          unsubscribeUrl: 'https://example.com/unsubscribe',
+          unsubscribeUrl: '{{UNSUBSCRIBE_URL}}',
         },
         style: { bg: '#f9fafb', color: '#6b7280', linkColor: '#2b2973', align: 'center', padding: '28px 24px', fontSize: '13px' },
       };
@@ -192,7 +202,7 @@ export function createBlock(type: BlockType): TemplateBlock {
           left: [createBlock('text')],
           right: [createBlock('text')],
         },
-        style: { gap: '12px', padding: '12px 24px', stackOnMobile: true },
+        style: { gap: '12px', padding: '12px 24px', stackOnMobile: false },
       };
   }
 }

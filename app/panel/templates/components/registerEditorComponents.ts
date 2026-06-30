@@ -81,6 +81,27 @@ export function registerImageComponent(
     },
   });
 
+  gjs.Commands.add('add-button-below-image', {
+    run(editor: Editor) {
+      const sel = editor.getSelected();
+      if (!sel || sel.get('type') !== 'image') return;
+      const parent = sel.parent();
+      if (!parent) return;
+      const siblings = parent.components();
+      const idx = siblings.indexOf(sel);
+      siblings.add(
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+          <tr>
+            <td style="padding:16px 10px;text-align:center;">
+              <a href="#" style="display:inline-block;padding:14px 32px;background-color:#2b2973;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:16px;">Tıkla</a>
+            </td>
+          </tr>
+        </table>`,
+        { at: idx + 1 },
+      );
+    },
+  });
+
   gjs.DomComponents.addType('image', {
     extend: 'image',
     model: {
@@ -91,6 +112,11 @@ export function registerImageComponent(
             label: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>`,
             command: 'upload-image-cmd',
             attributes: { title: 'Görsel Yükle' },
+          },
+          {
+            label: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="7" width="18" height="10" rx="5" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v4"/></svg>`,
+            command: 'add-button-below-image',
+            attributes: { title: 'Altına Buton Ekle' },
           },
           { attributes: { class: 'fa fa-clone' }, command: 'tlb-clone' },
           { attributes: { class: 'fa fa-trash-o' }, command: 'tlb-delete' },
@@ -105,6 +131,110 @@ export function registerImageComponent(
             { id: '_self', value: '_self', name: 'Aynı Sayfa' },
           ]},
         ],
+      },
+    },
+  });
+}
+
+export function registerImageWithButtonComponent(gjs: Editor) {
+  gjs.DomComponents.addType('image-with-button', {
+    isComponent: (el) => {
+      if (el?.getAttribute?.('data-gjs-type') === 'image-with-button') {
+        return { type: 'image-with-button' };
+      }
+    },
+    model: {
+      defaults: {
+        tagName: 'table',
+        attributes: {
+          role: 'presentation',
+          width: '100%',
+          cellpadding: '0',
+          cellspacing: '0',
+          border: '0',
+          'data-gjs-type': 'image-with-button',
+          style: 'width:100%;',
+        },
+        droppable: false,
+        traits: [
+          { type: 'text', name: 'data-btn-text', label: 'Buton Metni', changeProp: true },
+          { type: 'text', name: 'data-btn-href', label: 'Buton Link', placeholder: 'https://', changeProp: true },
+          { type: 'color', name: 'data-btn-bg', label: 'Buton Rengi', changeProp: true },
+          { type: 'color', name: 'data-btn-color', label: 'Yazı Rengi', changeProp: true },
+        ],
+        'data-btn-text': 'Tıkla',
+        'data-btn-href': '#',
+        'data-btn-bg': '#2b2973',
+        'data-btn-color': '#ffffff',
+        components: [
+          {
+            tagName: 'tbody',
+            components: [
+              {
+                tagName: 'tr',
+                components: [{
+                  tagName: 'td',
+                  attributes: { style: 'padding:0;', align: 'center' },
+                  components: [{
+                    type: 'image',
+                    attributes: {
+                      src: 'https://via.placeholder.com/600x300',
+                      alt: 'Görsel',
+                    },
+                    style: { width: '100%', 'max-width': '600px', height: 'auto', display: 'block' },
+                  }],
+                }],
+              },
+              {
+                tagName: 'tr',
+                components: [{
+                  tagName: 'td',
+                  attributes: { style: 'padding:20px 10px;text-align:center;', class: 'img-btn-cell', align: 'center' },
+                  components: [{
+                    type: 'link',
+                    attributes: { href: '#', class: 'img-btn-link' },
+                    style: {
+                      display: 'inline-block',
+                      padding: '14px 32px',
+                      'background-color': '#2b2973',
+                      color: '#ffffff',
+                      'text-decoration': 'none',
+                      'border-radius': '8px',
+                      'font-weight': '600',
+                      'font-size': '16px',
+                    },
+                    components: [{ type: 'textnode', content: 'Tıkla' }],
+                  }],
+                }],
+              },
+            ],
+          },
+        ],
+      },
+      init() {
+        const syncButton = () => {
+          const btnLink = this.find('.img-btn-link')[0] || this.find('a')[0];
+          if (!btnLink) return;
+          const text = this.get('data-btn-text') || 'Tıkla';
+          const href = this.get('data-btn-href') || '#';
+          const bg = this.get('data-btn-bg') || '#2b2973';
+          const color = this.get('data-btn-color') || '#ffffff';
+          const textNode = btnLink.components()?.at?.(0);
+          if (textNode) {
+            textNode.set('content', text);
+          } else {
+            btnLink.components(text);
+          }
+          btnLink.addAttributes({ href });
+          btnLink.addStyle({
+            'background-color': bg,
+            color,
+          });
+        };
+        ['data-btn-text', 'data-btn-href', 'data-btn-bg', 'data-btn-color'].forEach((prop) => {
+          this.on(`change:${prop}`, syncButton);
+        });
+        syncButton();
       },
     },
   });

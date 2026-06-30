@@ -10,10 +10,11 @@ import SpacingPanel, { type SpacingInfo } from './SpacingPanel';
 import { editorBlocks } from './editorBlocks';
 import { editorStyleSectors } from './editorStyleSectors';
 import { editorCanvasCss } from './editorCanvasCss';
-import { inlineCssIntoHtml } from './emailUtils';
+import { inlineCssIntoHtml, buildEmailDocument } from './emailUtils';
 import {
   registerSpacingSliderTrait,
   registerImageComponent,
+  registerImageWithButtonComponent,
   registerTableComponents,
   registerLinkComponents,
   registerRteActions,
@@ -24,6 +25,29 @@ import {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 const UPLOAD_BASE = process.env.NEXT_PUBLIC_UPLOAD_BASE_URL || API_URL;
 const GRID = 5;
+
+const DEVICE_WIDTHS: Record<'Desktop' | 'Tablet' | 'Mobile', string> = {
+  Desktop: '600px',
+  Tablet: '768px',
+  Mobile: '320px',
+};
+
+const PREVIEW_WIDTHS: Record<'Desktop' | 'Tablet' | 'Mobile', number> = {
+  Desktop: 600,
+  Tablet: 768,
+  Mobile: 375,
+};
+
+function applyDeviceCanvasStyles(gjs: Editor, device: 'Desktop' | 'Tablet' | 'Mobile') {
+  const frame = gjs.Canvas.getFrameEl();
+  const frameDoc = frame?.contentDocument;
+  if (!frameDoc?.body) return;
+  const body = frameDoc.body;
+  const maxW = DEVICE_WIDTHS[device] || '600px';
+  body.style.width = '100%';
+  body.style.maxWidth = maxW;
+  body.style.minWidth = '0';
+}
 
 const snap = (val: string): string => {
   const n = parseFloat(val);
@@ -164,6 +188,7 @@ export default function TemplateEditor({
     // ── Register custom traits & components ──
     registerSpacingSliderTrait(gjs);
     registerImageComponent(gjs, setCropFile, cropTargetRef);
+    registerImageWithButtonComponent(gjs);
     registerTableComponents(gjs);
     registerLinkComponents(gjs);
     registerRteActions(gjs);
@@ -387,6 +412,13 @@ export default function TemplateEditor({
     }
 
     gjs.setDevice('Desktop');
+    applyDeviceCanvasStyles(gjs, 'Desktop');
+
+    gjs.on('change:device', () => {
+      const device = (gjs.getDevice() || 'Desktop') as 'Desktop' | 'Tablet' | 'Mobile';
+      setActiveDevice(device);
+      requestAnimationFrame(() => applyDeviceCanvasStyles(gjs, device));
+    });
 
     setEditor(gjs);
 
@@ -408,53 +440,7 @@ export default function TemplateEditor({
     const bodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
 
     const bodyContent = inlineCssIntoHtml(bodyRaw, css);
-
-    const fullHtml = `<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
-  <title></title>
-  <!--[if (gte mso 9)|(IE)]>
-  <style type="text/css">
-    body { width: 600px !important; margin: 0 auto !important; }
-    table { border-collapse: collapse; }
-    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-    img { -ms-interpolation-mode: bicubic; border: 0; }
-  </style>
-  <![endif]-->
-  <style type="text/css">
-body {
-  margin: 0;
-  padding: 0;
-  background-color: #e8ecf0;
-  -webkit-text-size-adjust: 100%;
-  -ms-text-size-adjust: 100%;
-  font-family: Arial, Helvetica, sans-serif;
-}
-img { border: 0; outline: none; text-decoration: none; display: block; max-width: 100%; }
-table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
-div, p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
-${css}
-  </style>
-</head>
-<body style="margin:0;padding:0;background-color:#e8ecf0;font-family:Arial,Helvetica,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e8ecf0;">
-    <tr>
-      <td align="center" valign="top" style="padding:0;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:${bodyBg};margin:0 auto;table-layout:fixed;">
-          <tr>
-            <td valign="top" style="padding:0;background-color:${bodyBg};overflow:hidden;width:600px;max-width:600px;word-wrap:break-word;">
-${bodyContent}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+    const fullHtml = buildEmailDocument(bodyContent, css, bodyBg);
 
     onSave({ html: fullHtml, css: '', gjsData });
   }, [editor, onSave]);
@@ -462,6 +448,9 @@ ${bodyContent}
   const switchDevice = (device: 'Desktop' | 'Tablet' | 'Mobile') => {
     editor?.setDevice(device);
     setActiveDevice(device);
+    if (editor) {
+      requestAnimationFrame(() => applyDeviceCanvasStyles(editor, device));
+    }
   };
 
   const handleTextAlign = (align: string) => {
@@ -516,10 +505,12 @@ ${bodyContent}
     const wrapper = editor.getWrapper();
     const wrapperStyle = wrapper?.getStyle() || {};
     const bodyBg = wrapperStyle['background-color'] || wrapperStyle['background'] || '#ffffff';
+    const previewWidth = PREVIEW_WIDTHS[activeDevice];
+    const html = buildEmailDocument(inlined, css, bodyBg, previewWidth);
 
-    const win = window.open('', '_blank');
+    const win = window.open('', '_blank', `width=${previewWidth + 40},height=800`);
     if (win) {
-      win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:0;background:#e8ecf0;font-family:Arial,Helvetica,sans-serif;}img{border:0;display:block;max-width:100%;}table,td{border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;}div,p,h1,h2,h3,h4,h5,h6{margin:0;padding:0;}${css}</style></head><body style="margin:0;padding:0;background:#e8ecf0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#e8ecf0;"><tr><td align="center" valign="top"><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:${bodyBg};table-layout:fixed;"><tr><td valign="top" style="background-color:${bodyBg};overflow:hidden;width:600px;max-width:600px;word-wrap:break-word;">${inlined}</td></tr></table></td></tr></table></body></html>`);
+      win.document.write(html);
       win.document.close();
     }
   };

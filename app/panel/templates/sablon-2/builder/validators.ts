@@ -18,6 +18,7 @@ export function validateDesign(design: TemplateDesign): string | null {
 export function ensureUrlProtocol(url: string): string {
   const trimmed = url.trim();
   if (!trimmed) return '';
+  if (trimmed === '{{UNSUBSCRIBE_URL}}') return trimmed;
   if (/^(https?:|mailto:|tel:)/i.test(trimmed) || trimmed.startsWith('/')) return trimmed;
   return `https://${trimmed}`;
 }

@@ -135,6 +135,10 @@ function createGalleryImage(index: number): GalleryImage {
     alt: `Görsel ${index + 1}`,
     width: '100%',
     caption: `Açıklama ${index + 1}`,
+    showButton: true,
+    buttonText: 'Tıkla',
+    buttonUrl: 'https://example.com',
+    buttonTarget: '_blank',
   };
 }
 
@@ -149,6 +153,7 @@ export default function Inspector() {
   const selectedId = useTemplate2Store((state) => state.selectedId);
   const setSettings = useTemplate2Store((state) => state.setSettings);
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const addButtonBelow = useTemplate2Store((state) => state.addButtonBelow);
   const block = findBlock(design.blocks, selectedId);
 
   if (!block) {
@@ -260,6 +265,13 @@ export default function Inspector() {
               />
             </Field>
             <ImageStyleControls block={block} />
+            <button
+              type="button"
+              onClick={() => addButtonBelow(block.id)}
+              className="w-full rounded-xl bg-gradient-to-r from-[#2b2973] to-[#4a3f9f] px-4 py-2.5 text-sm font-semibold text-white hover:shadow-md transition-all"
+            >
+              Görselin Altına Buton Ekle
+            </button>
           </>
         ) : null}
 
@@ -454,6 +466,20 @@ export default function Inspector() {
 
         {block.type === 'footer' ? (
           <>
+            <Field label="Abonelikten çık metni">
+              <input
+                value={block.content.unsubscribeText}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer'
+                      ? { ...current, content: { ...current.content, unsubscribeText: event.target.value } }
+                      : current,
+                  )
+                }
+                placeholder="Abonelikten çık"
+                className={inputClass}
+              />
+            </Field>
             <Field label="Abonelikten çık linki">
               <input
                 value={block.content.unsubscribeUrl}
@@ -464,8 +490,12 @@ export default function Inspector() {
                       : current,
                   )
                 }
+                placeholder="{{UNSUBSCRIBE_URL}}"
                 className={inputClass}
               />
+              <p className="text-xs text-gray-400 mt-1">
+                Otomatik doldurulur — <code>{'{{UNSUBSCRIBE_URL}}'}</code> bırakın. Önizlemede örnek link açılır; gerçek mailde kişiye özel olur.
+              </p>
             </Field>
             <Field label="Arka plan">
               <input
@@ -491,7 +521,7 @@ export default function Inspector() {
                 className="h-10 w-full"
               />
             </Field>
-            <Field label="Link rengi">
+            <Field label="Buton rengi">
               <input
                 type="color"
                 value={block.style.linkColor}
@@ -914,7 +944,10 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
               current.type === 'gallery'
                 ? {
                     ...current,
-                    content: { images: resizeGalleryImages(current.content.images, columns) },
+                    content: {
+                      ...current.content,
+                      images: resizeGalleryImages(current.content.images, columns),
+                    },
                     style: { ...current.style, columns },
                   }
                 : current,
@@ -929,7 +962,89 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
         </select>
       </Field>
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
-        <div className="text-xs font-bold text-gray-600">Görsel URL, Tıklama Linki ve Alt Yazılar</div>
+        <div className="text-xs font-bold text-gray-600">Görsel Altı Butonlar</div>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={block.content.showButtons ?? true}
+            onChange={(event) =>
+              updateBlock(block.id, (current) =>
+                current.type === 'gallery'
+                  ? { ...current, content: { ...current.content, showButtons: event.target.checked } }
+                  : current,
+              )
+            }
+            className="rounded border-gray-300"
+          />
+          Her görselin altında buton göster
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Buton rengi</span>
+            <input
+              type="color"
+              value={block.style.buttonBg ?? '#2b2973'}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? { ...current, style: { ...current.style, buttonBg: event.target.value } }
+                    : current,
+                )
+              }
+              className={colorInputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Yazı rengi</span>
+            <input
+              type="color"
+              value={block.style.buttonColor ?? '#ffffff'}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? { ...current, style: { ...current.style, buttonColor: event.target.value } }
+                    : current,
+                )
+              }
+              className={colorInputClass}
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Yazı boyutu</span>
+            <input
+              value={block.style.buttonFontSize ?? '12px'}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? { ...current, style: { ...current.style, buttonFontSize: event.target.value } }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="12px"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">İç boşluk</span>
+            <input
+              value={block.style.buttonPadding ?? '8px 12px'}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? { ...current, style: { ...current.style, buttonPadding: event.target.value } }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="8px 12px"
+            />
+          </label>
+        </div>
+      </div>
+      <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <div className="text-xs font-bold text-gray-600">Görsel URL, Link ve Butonlar</div>
         {block.content.images.slice(0, block.style.columns).map((image, index) => (
           <div key={image.id} className="space-y-2 rounded-lg bg-white p-3">
             <div className="text-xs font-semibold text-gray-500">Görsel {index + 1}</div>
@@ -941,6 +1056,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                     ? {
                         ...current,
                         content: {
+                          ...current.content,
                           images: current.content.images.map((item) =>
                             item.id === image.id ? { ...item, src: ensureUrlProtocol(event.target.value) } : item,
                           ),
@@ -965,6 +1081,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                       ? {
                           ...current,
                           content: {
+                            ...current.content,
                             images: current.content.images.map((item) =>
                               item.id === image.id ? { ...item, width: `${event.target.value}%` } : item,
                             ),
@@ -985,6 +1102,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                     ? {
                         ...current,
                         content: {
+                          ...current.content,
                           images: current.content.images.map((item) =>
                             item.id === image.id ? { ...item, link: ensureUrlProtocol(event.target.value) } : item,
                           ),
@@ -1004,6 +1122,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                     ? {
                         ...current,
                         content: {
+                          ...current.content,
                           images: current.content.images.map((item) =>
                             item.id === image.id ? { ...item, caption: event.target.value } : item,
                           ),
@@ -1015,6 +1134,71 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
               className={inputClass}
               placeholder="Alt yazı"
             />
+            <input
+              value={image.buttonText ?? 'Tıkla'}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id ? { ...item, buttonText: event.target.value, showButton: true } : item,
+                          ),
+                        },
+                      }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="Buton yazısı"
+            />
+            <input
+              value={image.buttonUrl ?? ''}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id
+                              ? { ...item, buttonUrl: ensureUrlProtocol(event.target.value), showButton: true }
+                              : item,
+                          ),
+                        },
+                      }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="Buton linki: https://..."
+            />
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={image.showButton ?? true}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'gallery'
+                      ? {
+                          ...current,
+                          content: {
+                            ...current.content,
+                            images: current.content.images.map((item) =>
+                              item.id === image.id ? { ...item, showButton: event.target.checked } : item,
+                            ),
+                          },
+                        }
+                      : current,
+                  )
+                }
+                className="rounded border-gray-300"
+              />
+              Bu görselde buton göster
+            </label>
           </div>
         ))}
       </div>

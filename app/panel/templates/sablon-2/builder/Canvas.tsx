@@ -51,17 +51,19 @@ function renderBlock(block: TemplateBlock) {
 
 export default function Canvas() {
   const design = useTemplate2Store((state) => state.design);
+  const deviceMode = useTemplate2Store((state) => state.deviceMode);
   const selectBlock = useTemplate2Store((state) => state.selectBlock);
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas' });
+  const isMobile = deviceMode === 'mobile';
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto overscroll-contain bg-slate-100 p-6 pb-36">
+    <div className={`h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-slate-100 ${isMobile ? 'p-2 pb-24' : 'p-6 pb-36'}`}>
       <div
         ref={setNodeRef}
         onClick={() => selectBlock(null)}
-        className={`mx-auto min-h-[1080px] rounded-3xl p-4 pb-36 shadow-sm transition-all ${
+        className={`mx-auto rounded-3xl shadow-sm transition-all ${
           isOver ? 'ring-4 ring-emerald-200' : ''
-        }`}
+        } ${isMobile ? 'min-h-[720px] p-2 pb-24' : 'min-h-[1080px] p-4 pb-36'}`}
         style={{
           width: `${design.settings.contentWidth}px`,
           maxWidth: '100%',

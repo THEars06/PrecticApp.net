@@ -170,3 +170,70 @@ export function inlineCssIntoHtml(html: string, css: string): string {
     return html;
   }
 }
+
+export const EMAIL_RESPONSIVE_CSS = `
+@media only screen and (max-width: 600px) {
+  .email-container { width: 100% !important; max-width: 100% !important; min-width: 100% !important; }
+  .email-container img { width: 100% !important; max-width: 100% !important; height: auto !important; }
+  .email-col-stack { display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+}
+`;
+
+export function buildEmailDocument(
+  bodyContent: string,
+  css: string,
+  bodyBg: string,
+  previewWidth?: number,
+): string {
+  const viewportMeta = previewWidth
+    ? `<meta name="viewport" content="width=${previewWidth}, initial-scale=1">`
+    : '<meta name="viewport" content="width=device-width, initial-scale=1">';
+
+  return `<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  ${viewportMeta}
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <title></title>
+  <!--[if (gte mso 9)|(IE)]>
+  <style type="text/css">
+    body { width: 600px !important; margin: 0 auto !important; }
+    table { border-collapse: collapse; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; border: 0; }
+  </style>
+  <![endif]-->
+  <style type="text/css">
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #e8ecf0;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+}
+img { border: 0; outline: none; text-decoration: none; display: block; max-width: 100%; }
+table, td { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+div, p, h1, h2, h3, h4, h5, h6 { margin: 0; padding: 0; }
+${css}
+${EMAIL_RESPONSIVE_CSS}
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#e8ecf0;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e8ecf0;">
+    <tr>
+      <td align="center" valign="top" style="padding:0;">
+        <table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:${bodyBg};margin:0 auto;table-layout:fixed;">
+          <tr>
+            <td valign="top" style="padding:0;background-color:${bodyBg};overflow:hidden;width:600px;max-width:600px;word-wrap:break-word;">
+${bodyContent}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}

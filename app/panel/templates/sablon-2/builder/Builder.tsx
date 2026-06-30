@@ -9,8 +9,9 @@ import DeviceFrame from './DeviceFrame';
 import Inspector from './Inspector';
 import { saveTemplate2, previewTemplate2 } from './api';
 import { useTemplate2Store } from './store';
-import { BlockType, DeviceMode } from './types';
+import { BlockType } from './types';
 import { validateDesign, validateMeta } from './validators';
+import { MOBILE_PREVIEW_WIDTH } from './DeviceFrame';
 
 type Props = {
   templateId?: string;
@@ -29,7 +30,8 @@ export default function Builder({ templateId, draftKey }: Props) {
   const moveBlock = useTemplate2Store((state) => state.moveBlock);
   const undo = useTemplate2Store((state) => state.undo);
   const redo = useTemplate2Store((state) => state.redo);
-  const [device, setDevice] = useState<DeviceMode>('desktop');
+  const device = useTemplate2Store((state) => state.deviceMode);
+  const setDevice = useTemplate2Store((state) => state.setDeviceMode);
   const [saving, setSaving] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -98,7 +100,7 @@ export default function Builder({ templateId, draftKey }: Props) {
     setError('');
     setPreviewing(true);
     try {
-      setPreviewHtml(await previewTemplate2(design));
+      setPreviewHtml(await previewTemplate2(design, device));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Önizleme oluşturulamadı.');
     } finally {
@@ -159,18 +161,31 @@ export default function Builder({ templateId, draftKey }: Props) {
       </DndContext>
 
       {previewHtml ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
-          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            className="flex h-[90vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            style={{ width: device === 'mobile' ? MOBILE_PREVIEW_WIDTH + 32 : '100%', maxWidth: device === 'mobile' ? MOBILE_PREVIEW_WIDTH + 32 : '64rem' }}
+          >
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <div>
                 <h3 className="text-sm font-bold text-gray-900">Gerçek Email Önizleme</h3>
-                <p className="text-xs text-gray-500">Backend renderer çıktısı</p>
+                <p className="text-xs text-gray-500">
+                  {device === 'mobile' ? 'Mobil görünüm (375px)' : 'Masaüstü görünüm'}
+                </p>
               </div>
               <button type="button" onClick={() => setPreviewHtml(null)} className="rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-100">
                 Kapat
               </button>
             </div>
-            <iframe title="Email Önizleme" srcDoc={previewHtml} className="h-full w-full border-0 bg-white" sandbox="allow-same-origin" />
+            <div className={`flex-1 overflow-hidden ${device === 'mobile' ? 'bg-slate-200 p-3' : ''}`}>
+              <iframe
+                title="Email Önizleme"
+                srcDoc={previewHtml}
+                className="h-full w-full border-0 bg-white"
+                style={device === 'mobile' ? { borderRadius: '12px', boxShadow: '0 4px 24px rgba(0,0,0,0.12)' } : undefined}
+                sandbox="allow-same-origin allow-popups allow-top-navigation-by-user-activation"
+              />
+            </div>
           </div>
         </div>
       ) : null}

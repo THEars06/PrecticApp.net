@@ -49,7 +49,10 @@ function renderNested(block: TemplateBlock) {
 export default function ColumnsBlock({ block }: { block: ColumnsBlockType }) {
   return (
     <BlockFrame id={block.id} label="2 Kolon">
-      <div className="grid grid-cols-1 gap-3 px-6 py-4 md:grid-cols-2" style={{ gap: block.style.gap, padding: block.style.padding }}>
+      <div
+        className="grid grid-cols-2 gap-3 px-6 py-4"
+        style={{ gap: block.style.gap, padding: block.style.padding }}
+      >
         <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-2">
           {block.content.left.map(renderNested)}
         </div>

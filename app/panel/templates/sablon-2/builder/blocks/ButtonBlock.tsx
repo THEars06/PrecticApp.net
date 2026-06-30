@@ -25,6 +25,8 @@ export default function ButtonBlock({ block }: { block: ButtonBlockType }) {
           }
           style={{
             display: 'inline-block',
+            width: 'auto',
+            maxWidth: '100%',
             background: block.style.bg,
             color: block.style.color,
             borderRadius: block.style.borderRadius,
@@ -32,8 +34,9 @@ export default function ButtonBlock({ block }: { block: ButtonBlockType }) {
             fontSize: block.style.fontSize,
             textDecoration: 'none',
             fontWeight: 700,
+            boxSizing: 'border-box',
           }}
-          className="outline-none"
+          className="mx-auto inline-block w-auto max-w-full outline-none"
         >
           {block.content.text}
         </a>
