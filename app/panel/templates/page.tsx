@@ -27,6 +27,11 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState<string | null>(null);
+
+  // İsim düzenleme state'leri
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [renaming, setRenaming] = useState(false);
   
   // Kod ile oluştur modal state'leri
   const [codeModal, setCodeModal] = useState(false);
@@ -131,6 +136,56 @@ export default function TemplatesPage() {
     setCodeSubject('');
     setHtmlCode('');
     setShowPreview(false);
+  };
+
+  // İsim düzenlemeyi başlat
+  const startRename = (template: Template) => {
+    setEditingId(template.id);
+    setEditingName(template.name);
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setEditingName('');
+  };
+
+  // İsmi kaydet
+  const handleRename = async (id: string) => {
+    const newName = editingName.trim();
+    if (!newName) {
+      alert('Şablon adı boş olamaz!');
+      return;
+    }
+    const current = templates.find(t => t.id === id);
+    if (current && current.name === newName) {
+      cancelRename();
+      return;
+    }
+
+    setRenaming(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/templates/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setTemplates(prev => prev.map(t => (t.id === id ? { ...t, name: updated.name ?? newName } : t)));
+        cancelRename();
+      } else {
+        alert('Şablon adı güncellenemedi!');
+      }
+    } catch (error) {
+      console.error('Şablon adı güncellenirken hata:', error);
+      alert('Bir hata oluştu!');
+    } finally {
+      setRenaming(false);
+    }
   };
 
   const handleClone = async (id: string) => {
@@ -275,12 +330,50 @@ export default function TemplatesPage() {
               {/* Content */}
               <div className="p-4">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900 truncate">{template.name}</h3>
+                  {editingId === template.id ? (
+                    <input
+                      type="text"
+                      value={editingName}
+                      autoFocus
+                      disabled={renaming}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename(template.id);
+                        if (e.key === 'Escape') cancelRename();
+                      }}
+                      onBlur={() => handleRename(template.id)}
+                      className="flex-1 min-w-0 px-2 py-1 border border-[#2b2973] rounded-lg text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2b2973]/20"
+                    />
+                  ) : (
+                    <h3 className="font-semibold text-gray-900 truncate flex-1 min-w-0">{template.name}</h3>
+                  )}
                   {isTemplate2(template) ? (
                     <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
                       Şablon 2
                     </span>
                   ) : null}
+                  {editingId === template.id ? (
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); handleRename(template.id); }}
+                      disabled={renaming}
+                      title="Kaydet"
+                      className="shrink-0 text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => startRename(template)}
+                      title="İsmi düzenle"
+                      className="shrink-0 text-gray-400 hover:text-[#2b2973] transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm text-gray-500 mt-1 line-clamp-2">{template.description || 'Açıklama yok'}</p>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">

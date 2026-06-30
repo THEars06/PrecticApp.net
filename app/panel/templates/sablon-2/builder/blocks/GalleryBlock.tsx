@@ -5,15 +5,17 @@ import { DragEvent, useRef, useState } from 'react';
 import { GalleryBlock as GalleryBlockType } from '../types';
 import { useTemplate2Store } from '../store';
 import { uploadImage } from '../uploadImage';
+import { mobileButtonFont, mobileButtonMinHeight, mobileButtonPadding } from '../mobileButtonScale';
 import BlockFrame from './BlockFrame';
 
-function galleryButtonStyle(block: GalleryBlockType) {
+function galleryButtonStyle(block: GalleryBlockType, device: 'desktop' | 'mobile') {
   return {
     buttonBg: block.style.buttonBg ?? '#2b2973',
     buttonColor: block.style.buttonColor ?? '#ffffff',
     buttonRadius: block.style.buttonRadius ?? '8px',
-    buttonFontSize: block.style.buttonFontSize ?? '12px',
-    buttonPadding: block.style.buttonPadding ?? '8px 12px',
+    buttonFontSize: mobileButtonFont(block.style.buttonFontSize ?? '12px', device),
+    buttonPadding: mobileButtonPadding(block.style.buttonPadding ?? '8px 12px', device),
+    buttonMinHeight: mobileButtonMinHeight('36px', device),
   };
 }
 
@@ -23,10 +25,11 @@ function imageShowsButton(block: GalleryBlockType, showButton?: boolean) {
 
 export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const device = useTemplate2Store((state) => state.deviceMode);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const btnStyle = galleryButtonStyle(block);
+  const btnStyle = galleryButtonStyle(block, device);
   const columnCount = block.style.columns;
   const visibleImages = block.content.images.slice(0, block.style.columns);
 
@@ -61,12 +64,12 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
 
   return (
     <BlockFrame id={block.id} label="Yan Yana Görsel">
-      <div style={{ padding: block.style.padding }}>
+      <div style={{ padding: device === 'mobile' ? '8px 8px' : block.style.padding }}>
         <div
           className="grid items-stretch"
           style={{
             gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-            gap: block.style.gap,
+            gap: device === 'mobile' ? '8px' : block.style.gap,
             textAlign: block.style.align,
           }}
         >
@@ -88,7 +91,7 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
                       src={image.src}
                       alt={image.alt}
                       style={{
-                        width: image.width || block.style.imageWidth,
+                        width: device === 'mobile' ? '100%' : image.width || block.style.imageWidth,
                         maxWidth: '100%',
                         borderRadius: block.style.borderRadius,
                         display: 'inline-block',
@@ -160,7 +163,7 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
                         display: 'inline-block',
                         width: 'auto',
                         maxWidth: '100%',
-                        minHeight: '36px',
+                        minHeight: btnStyle.buttonMinHeight,
                         background: btnStyle.buttonBg,
                         color: btnStyle.buttonColor,
                         borderRadius: btnStyle.buttonRadius,
