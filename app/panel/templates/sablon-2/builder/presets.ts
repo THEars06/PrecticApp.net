@@ -1,9 +1,10 @@
 import { nanoid } from 'nanoid';
+import { GISE_BRAND } from './brandColors';
 import { BlockType, PresetId, TemplateBlock, TemplateDesign, TemplateSettings } from './types';
 
 export const defaultSettings: TemplateSettings = {
-  bgColor: '#f3f4f6',
-  contentBgColor: '#ffffff',
+  bgColor: GISE_BRAND.outerBg,
+  contentBgColor: GISE_BRAND.contentBg,
   contentWidth: 600,
   fontFamily: 'Arial, Helvetica, sans-serif',
 };
@@ -23,10 +24,9 @@ const createGalleryImages = (count: number) =>
     src: '',
     alt: `Görsel ${index + 1}`,
     width: '100%',
-    caption: `Açıklama ${index + 1}`,
+    caption: '',
     showButton: true,
-    buttonText: 'Tıkla',
-    buttonUrl: 'https://example.com',
+    buttonText: 'Satın Al',
     buttonTarget: '_blank' as const,
   }));
 
@@ -39,14 +39,20 @@ export function createBlock(type: BlockType): TemplateBlock {
         id,
         type,
         content: { text: 'Başlık yazın', level: 1 },
-        style: { color: '#111827', align: 'center', fontSize: '32px' },
+        style: { color: GISE_BRAND.secondary, align: 'center', fontSize: '24px', padding: '16px 24px' },
       };
     case 'text':
       return {
         id,
         type,
         content: { html: 'Metin içeriğinizi buraya yazın.' },
-        style: { color: '#374151', fontSize: '16px', lineHeight: '1.6', align: 'center' },
+        style: {
+          color: GISE_BRAND.textBody,
+          fontSize: '16px',
+          lineHeight: '1.6',
+          align: 'center',
+          padding: '12px 24px',
+        },
       };
     case 'image':
       return {
@@ -58,7 +64,7 @@ export function createBlock(type: BlockType): TemplateBlock {
           align: 'center',
           borderRadius: '12px',
           padding: '12px 24px',
-          captionColor: '#6b7280',
+          captionColor: GISE_BRAND.textMuted,
           captionFontSize: '13px',
         },
       };
@@ -69,6 +75,7 @@ export function createBlock(type: BlockType): TemplateBlock {
         content: {
           images: createGalleryImages(4),
           showButtons: true,
+          captionsEnabled: false,
         },
         style: {
           columns: 4,
@@ -77,13 +84,17 @@ export function createBlock(type: BlockType): TemplateBlock {
           align: 'center',
           borderRadius: '12px',
           padding: '12px 24px',
-          captionColor: '#6b7280',
+          captionColor: GISE_BRAND.textMuted,
           captionFontSize: '13px',
-          buttonBg: '#2b2973',
-          buttonColor: '#ffffff',
+          buttonBg: GISE_BRAND.primary,
+          buttonColor: GISE_BRAND.white,
           buttonRadius: '8px',
           buttonFontSize: '12px',
           buttonPadding: '8px 12px',
+          buttonMarginTop: '8px',
+          buttonMarginBottom: '0px',
+          cropAspect: 1,
+          imageAspectRatio: '1 / 1',
         },
       };
     case 'hero':
@@ -96,14 +107,35 @@ export function createBlock(type: BlockType): TemplateBlock {
           buttonText: 'İncele',
           buttonUrl: 'https://example.com',
         },
-        style: { bgColor: '#eef2ff', textColor: '#111827', align: 'center', padding: '40px 28px', borderRadius: '16px', imageWidth: '100%' },
+        style: {
+          bgColor: GISE_BRAND.primaryLight,
+          textColor: GISE_BRAND.secondary,
+          buttonBg: GISE_BRAND.primary,
+          buttonColor: GISE_BRAND.white,
+          buttonFontSize: '15px',
+          buttonPadding: '13px 22px',
+          buttonMarginTop: '20px',
+          buttonMarginBottom: '0px',
+          align: 'center',
+          padding: '40px 28px',
+          borderRadius: '16px',
+          imageWidth: '100%',
+        },
       };
     case 'button':
       return {
         id,
         type,
         content: { text: 'Buton', url: 'https://example.com', target: '_blank' },
-        style: { bg: '#2b2973', color: '#ffffff', borderRadius: '8px', padding: '14px 24px', align: 'center', fontSize: '16px' },
+        style: {
+          bg: GISE_BRAND.primary,
+          color: GISE_BRAND.white,
+          borderRadius: '8px',
+          padding: '14px 24px',
+          align: 'center',
+          fontSize: '16px',
+          blockPadding: '16px 24px',
+        },
       };
     case 'coupon':
       return {
@@ -111,10 +143,10 @@ export function createBlock(type: BlockType): TemplateBlock {
         type,
         content: { label: 'İndirim Kodu', code: 'KUPON20', description: 'Sepette kullanabileceğiniz özel kod.' },
         style: {
-          bg: '#fff7ed',
-          borderColor: '#fb923c',
-          textColor: '#9a3412',
-          codeColor: '#111827',
+          bg: GISE_BRAND.primaryLight,
+          borderColor: GISE_BRAND.primary,
+          textColor: GISE_BRAND.secondary,
+          codeColor: GISE_BRAND.primary,
           align: 'center',
           padding: '22px 24px',
           borderRadius: '14px',
@@ -126,12 +158,19 @@ export function createBlock(type: BlockType): TemplateBlock {
         id,
         type,
         content: {
-          company: 'PrecticApp',
+          company: 'GiseKibris',
           text: 'Bu e-posta bilgilendirme amacıyla gönderilmiştir.',
           unsubscribeText: 'Abonelikten çık',
           unsubscribeUrl: '{{UNSUBSCRIBE_URL}}',
         },
-        style: { bg: '#f9fafb', color: '#6b7280', linkColor: '#2b2973', align: 'center', padding: '28px 24px', fontSize: '13px' },
+        style: {
+          bg: GISE_BRAND.outerBg,
+          color: GISE_BRAND.textMuted,
+          linkColor: GISE_BRAND.primary,
+          align: 'center',
+          padding: '28px 24px',
+          fontSize: '13px',
+        },
       };
     case 'product':
       return {
@@ -145,12 +184,16 @@ export function createBlock(type: BlockType): TemplateBlock {
           buttonUrl: 'https://example.com/product',
         },
         style: {
-          bg: '#ffffff',
-          titleColor: '#111827',
-          textColor: '#6b7280',
-          priceColor: '#2b2973',
-          buttonBg: '#2b2973',
-          buttonColor: '#ffffff',
+          bg: GISE_BRAND.white,
+          titleColor: GISE_BRAND.secondary,
+          textColor: GISE_BRAND.textMuted,
+          priceColor: GISE_BRAND.primary,
+          buttonBg: GISE_BRAND.primary,
+          buttonColor: GISE_BRAND.white,
+          buttonFontSize: '15px',
+          buttonPadding: '13px 22px',
+          buttonMarginTop: '16px',
+          buttonMarginBottom: '0px',
           align: 'center',
           padding: '22px 24px',
           borderRadius: '16px',
@@ -170,10 +213,10 @@ export function createBlock(type: BlockType): TemplateBlock {
           ],
         },
         style: {
-          bg: '#f9fafb',
-          color: '#374151',
-          linkBg: '#ffffff',
-          linkColor: '#2b2973',
+          bg: GISE_BRAND.outerBg,
+          color: GISE_BRAND.secondary,
+          linkBg: GISE_BRAND.white,
+          linkColor: GISE_BRAND.primary,
           align: 'center',
           padding: '24px 24px',
           borderRadius: '16px',
@@ -185,7 +228,7 @@ export function createBlock(type: BlockType): TemplateBlock {
         id,
         type,
         content: {},
-        style: { color: '#e5e7eb', thickness: '1px', padding: '18px 24px' },
+        style: { color: GISE_BRAND.border, thickness: '1px', padding: '18px 24px' },
       };
     case 'spacer':
       return {

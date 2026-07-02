@@ -57,7 +57,7 @@ export default function SocialBlock({ block }: { block: SocialBlockType }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
 
   return (
-    <BlockFrame id={block.id} label="Sosyal Linkler">
+    <BlockFrame id={block.id} label="Sosyal Linkler" backgroundColor={block.style.bg}>
       <div
         style={{
           background: block.style.bg,

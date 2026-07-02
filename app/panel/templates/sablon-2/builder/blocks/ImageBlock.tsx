@@ -4,7 +4,7 @@
 import { DragEvent, useRef, useState } from 'react';
 import { ImageBlock as ImageBlockType } from '../types';
 import { useTemplate2Store } from '../store';
-import { uploadImage } from '../uploadImage';
+import { useImageUpload } from '../ImageUploadContext';
 import BlockFrame from './BlockFrame';
 
 export default function ImageBlock({ block }: { block: ImageBlockType }) {
@@ -12,36 +12,35 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   const addButtonBelow = useTemplate2Store((state) => state.addButtonBelow);
   const device = useTemplate2Store((state) => state.deviceMode);
+  const { requestCrop } = useImageUpload();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
 
-  const applyFile = async (file: File) => {
+  const handleFile = (file: File) => {
     setUploading(true);
     setError('');
-    try {
-      const url = await uploadImage(file);
-      updateBlock(block.id, (current) =>
-        current.type === 'image' ? { ...current, content: { ...current.content, src: url } } : current,
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Görsel yüklenemedi.');
-    } finally {
-      setUploading(false);
-    }
+    requestCrop({
+      file,
+      onComplete: (url) => {
+        updateBlock(block.id, (current) =>
+          current.type === 'image' ? { ...current, content: { ...current.content, src: url } } : current,
+        );
+        setUploading(false);
+      },
+    });
   };
 
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const file = event.dataTransfer.files.item(0);
-    if (file) void applyFile(file);
+    if (file) handleFile(file);
   };
 
   return (
-    <BlockFrame id={block.id} label="Görsel">
+    <BlockFrame id={block.id} label="Görsel" backgroundColor={block.style.blockBg}>
       <div
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
-        className={device === 'mobile' ? 'px-2 py-3' : 'px-6 py-4'}
         style={{
           textAlign: block.style.align,
           padding: device === 'mobile' ? '8px 8px' : block.style.padding,
@@ -81,7 +80,7 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="w-full rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center text-sm text-gray-500 hover:border-[#2b2973] hover:bg-purple-50"
+            className="w-full rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-10 text-center text-sm text-gray-500 hover:border-[#ae256c] hover:bg-purple-50"
           >
             {uploading ? 'Yükleniyor...' : 'Görseli buraya sürükle veya seç'}
           </button>
@@ -99,7 +98,7 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
               <button
                 type="button"
                 onClick={() => addButtonBelow(block.id)}
-                className="rounded-lg border border-[#2b2973]/30 bg-[#2b2973]/5 px-3 py-1.5 text-xs font-semibold text-[#2b2973] hover:bg-[#2b2973]/10"
+                className="rounded-lg border border-[#ae256c]/30 bg-[#ae256c]/5 px-3 py-1.5 text-xs font-semibold text-[#ae256c] hover:bg-[#ae256c]/10"
               >
                 Altına Buton Ekle
               </button>
@@ -125,7 +124,7 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
           className="hidden"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file) void applyFile(file);
+            if (file) handleFile(file);
             event.currentTarget.value = '';
           }}
         />

@@ -470,7 +470,7 @@ export default function TemplatesPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Mail Konusu
+                        Mail Başlığı
                       </label>
                       <input
                         type="text"
@@ -482,13 +482,13 @@ export default function TemplatesPage() {
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Açıklama
+                        Mail Şablonu Açıklaması
                       </label>
                       <input
                         type="text"
                         value={codeDescription}
                         onChange={(e) => setCodeDescription(e.target.value)}
-                        placeholder="Kısa bir açıklama..."
+                        placeholder="Mail şablonunun açıklaması..."
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2b2973]/20 focus:border-[#2b2973] text-black"
                       />
                     </div>

@@ -2,14 +2,15 @@
 
 import { TextBlock as TextBlockType } from '../types';
 import { useTemplate2Store } from '../store';
+import { getBlockPadding } from '../blockStyle';
 import BlockFrame from './BlockFrame';
 
 export default function TextBlock({ block }: { block: TextBlockType }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
 
   return (
-    <BlockFrame id={block.id} label="Metin">
-      <div className="px-6 py-3">
+    <BlockFrame id={block.id} label="Metin" backgroundColor={block.style.blockBg}>
+      <div style={{ padding: getBlockPadding(block) ?? '12px 24px' }}>
         <div
           contentEditable
           suppressContentEditableWarning

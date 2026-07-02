@@ -8,7 +8,7 @@ export default function CouponBlock({ block }: { block: CouponBlockType }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
 
   return (
-    <BlockFrame id={block.id} label="Kupon / Kod">
+    <BlockFrame id={block.id} label="Kupon / Kod" backgroundColor={block.style.bg}>
       <div className="px-6 py-4">
         <div
           style={{

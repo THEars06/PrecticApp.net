@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import Builder from '../builder/Builder';
 import { defaultSettings, presetOptions } from '../builder/presets';
+import { GISE_BRAND } from '../builder/brandColors';
 import { useTemplate2Store } from '../builder/store';
 import { PresetId, TemplateMeta, TemplateSettings } from '../builder/types';
 import { uploadImage } from '../builder/uploadImage';
 import { validateMeta } from '../builder/validators';
 
 const draftKey = 'template2:new';
-const colorTextClass = 'w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]';
+const colorTextClass = 'w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#ae256c]';
 
 function colorPickerValue(value: string, fallback: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
@@ -129,27 +130,27 @@ export default function NewTemplate2Page() {
               <input
                 value={meta.name}
                 onChange={(event) => setMeta((current) => ({ ...current, name: event.target.value }))}
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-900 outline-none focus:border-[#2b2973]"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-900 outline-none focus:border-[#ae256c]"
                 placeholder="Örn: Mayıs Kampanyası"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Konusu</span>
+              <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Başlığı</span>
               <input
                 value={meta.subject}
                 onChange={(event) => setMeta((current) => ({ ...current, subject: event.target.value }))}
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-900 outline-none focus:border-[#2b2973]"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-900 outline-none focus:border-[#ae256c]"
                 placeholder="Örn: Sana özel fırsatlar"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-gray-700">Açıklama</span>
+              <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Şablonu Açıklaması</span>
               <textarea
                 value={meta.description}
                 onChange={(event) => setMeta((current) => ({ ...current, description: event.target.value }))}
                 rows={3}
-                className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-gray-900 outline-none focus:border-[#2b2973]"
-                placeholder="Bu şablon ne için kullanılacak?"
+                className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-gray-900 outline-none focus:border-[#ae256c]"
+                placeholder="Mail şablonunun açıklaması..."
               />
             </label>
           </div>
@@ -162,16 +163,16 @@ export default function NewTemplate2Page() {
               <AppearanceColorInput
                 label="Dış arka plan rengi"
                 value={settings.bgColor}
-                fallback="#f3f4f6"
+                fallback={GISE_BRAND.outerBg}
                 onChange={(value) => setSettings((current) => ({ ...current, bgColor: value }))}
               />
               <AppearanceColorInput
                 label="İçerik arka plan rengi"
                 value={settings.contentBgColor}
-                fallback="#ffffff"
+                fallback={GISE_BRAND.contentBg}
                 onChange={(value) => setSettings((current) => ({ ...current, contentBgColor: value }))}
               />
-              <label className="block rounded-xl border-2 border-dashed border-gray-200 p-4 text-center text-sm text-gray-500 hover:border-[#2b2973]">
+              <label className="block rounded-xl border-2 border-dashed border-gray-200 p-4 text-center text-sm text-gray-500 hover:border-[#ae256c]">
                 <input
                   type="file"
                   accept="image/*"
@@ -196,7 +197,7 @@ export default function NewTemplate2Page() {
                   type="button"
                   onClick={() => setPreset(item.id)}
                   className={`w-full rounded-xl border p-3 text-left transition-all ${
-                    preset === item.id ? 'border-[#2b2973] bg-purple-50' : 'border-gray-200 hover:border-purple-200'
+                    preset === item.id ? 'border-[#ae256c] bg-purple-50' : 'border-gray-200 hover:border-purple-200'
                   }`}
                 >
                   <div className="text-sm font-bold text-gray-900">{item.name}</div>
@@ -212,7 +213,7 @@ export default function NewTemplate2Page() {
         <button
           type="button"
           onClick={handleStart}
-          className="rounded-xl bg-[#2b2973] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-200 hover:bg-[#1f1d5c]"
+          className="rounded-xl bg-[#ae256c] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-200 hover:bg-[#8a1d56]"
         >
           Tasarıma Geç
         </button>

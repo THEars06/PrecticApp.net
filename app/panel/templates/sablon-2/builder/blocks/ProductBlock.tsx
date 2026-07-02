@@ -4,36 +4,39 @@
 import { DragEvent, useRef, useState } from 'react';
 import { ProductBlock as ProductBlockType } from '../types';
 import { useTemplate2Store } from '../store';
-import { uploadImage } from '../uploadImage';
+import { useImageUpload } from '../ImageUploadContext';
 import { mobileButtonFont, mobileButtonPadding } from '../mobileButtonScale';
+import { GISE_BRAND } from '../brandColors';
 import BlockFrame from './BlockFrame';
 
 export default function ProductBlock({ block }: { block: ProductBlockType }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   const device = useTemplate2Store((state) => state.deviceMode);
+  const { requestCrop } = useImageUpload();
   const [uploading, setUploading] = useState(false);
 
-  const applyFile = async (file: File) => {
+  const handleFile = (file: File) => {
     setUploading(true);
-    try {
-      const url = await uploadImage(file);
-      updateBlock(block.id, (current) =>
-        current.type === 'product' ? { ...current, content: { ...current.content, image: url } } : current,
-      );
-    } finally {
-      setUploading(false);
-    }
+    requestCrop({
+      file,
+      onComplete: (url) => {
+        updateBlock(block.id, (current) =>
+          current.type === 'product' ? { ...current, content: { ...current.content, image: url } } : current,
+        );
+        setUploading(false);
+      },
+    });
   };
 
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const file = event.dataTransfer.files.item(0);
-    if (file) void applyFile(file);
+    if (file) handleFile(file);
   };
 
   return (
-    <BlockFrame id={block.id} label="Ürün Kartı">
+    <BlockFrame id={block.id} label="Ürün Kartı" backgroundColor={block.style.bg}>
       <div className={device === 'mobile' ? 'px-2 py-3' : 'px-6 py-4'}>
         <div
           onDragOver={(event) => event.preventDefault()}
@@ -79,7 +82,7 @@ export default function ProductBlock({ block }: { block: ProductBlockType }) {
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="mb-4 w-full rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm text-gray-500 hover:border-[#2b2973] hover:bg-purple-50"
+              className="mb-4 w-full rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm text-gray-500 hover:border-[#ae256c] hover:bg-purple-50"
             >
               {uploading ? 'Yükleniyor...' : 'Ürün görseli ekle'}
             </button>
@@ -126,12 +129,15 @@ export default function ProductBlock({ block }: { block: ProductBlockType }) {
             {block.content.price}
           </div>
           <span
-            className="mt-4 inline-block rounded-lg font-bold"
+            className="inline-block rounded-lg font-bold"
             style={{
+              display: 'inline-block',
+              marginTop: block.style.buttonMarginTop ?? '16px',
+              marginBottom: block.style.buttonMarginBottom ?? '0px',
               background: block.style.buttonBg,
               color: block.style.buttonColor,
-              padding: mobileButtonPadding('12px 20px', device),
-              fontSize: mobileButtonFont('14px', device),
+              padding: mobileButtonPadding(block.style.buttonPadding ?? '13px 22px', device),
+              fontSize: mobileButtonFont(block.style.buttonFontSize ?? '15px', device),
             }}
           >
             {block.content.buttonText}
@@ -143,7 +149,7 @@ export default function ProductBlock({ block }: { block: ProductBlockType }) {
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) void applyFile(file);
+              if (file) handleFile(file);
               event.currentTarget.value = '';
             }}
           />

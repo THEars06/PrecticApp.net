@@ -19,7 +19,7 @@ export default function FooterBlock({ block }: { block: FooterBlockType }) {
   const linkHref = resolveFooterLinkHref(block.content.unsubscribeUrl);
 
   return (
-    <BlockFrame id={block.id} label="Footer">
+    <BlockFrame id={block.id} label="Footer" backgroundColor={block.style.bg}>
       <div
         style={{
           background: block.style.bg,

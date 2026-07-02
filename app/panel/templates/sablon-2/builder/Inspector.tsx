@@ -4,6 +4,10 @@ import { nanoid } from 'nanoid';
 import { GalleryColumns, GalleryImage, SocialLink, SocialPlatform, TemplateBlock } from './types';
 import { useTemplate2Store } from './store';
 import { ensureUrlProtocol } from './validators';
+import { getBlockBackground, getBlockPadding, setBlockBackground, setBlockPadding, galleryCaptionsEnabled } from './blockStyle';
+import { formatButtonPadding, parseButtonPadding, parsePadding, updatePaddingVertical } from './parsePadding';
+import { RangeSlider } from './SpacingSlider';
+import { GISE_BRAND, BRAND_BG_PRESETS } from './brandColors';
 
 function findBlock(blocks: TemplateBlock[], id: string | null): TemplateBlock | null {
   if (!id) return null;
@@ -26,7 +30,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const inputClass = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#2b2973]';
+const inputClass = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#ae256c]';
 const colorInputClass = 'h-10 w-14 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1';
 const socialPlatformOptions: { value: SocialPlatform; label: string }[] = [
   { value: 'instagram', label: 'Instagram' },
@@ -70,6 +74,212 @@ function ColorField({
   );
 }
 
+function ButtonColorFields({
+  bg,
+  color,
+  bgFallback,
+  colorFallback,
+  onBgChange,
+  onColorChange,
+}: {
+  bg: string;
+  color: string;
+  bgFallback: string;
+  colorFallback: string;
+  onBgChange: (value: string) => void;
+  onColorChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <ColorField label="Buton rengi" value={bg} fallback={bgFallback} onChange={onBgChange} />
+      <ColorField label="Buton yazı rengi" value={color} fallback={colorFallback} onChange={onColorChange} />
+    </div>
+  );
+}
+
+function parsePxValue(value: string | undefined, fallback: number): number {
+  const match = (value || '').trim().match(/^(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : fallback;
+}
+
+function ButtonSizeControls({
+  fontSize,
+  padding,
+  marginTop,
+  marginBottom,
+  defaultFontSize = '16px',
+  defaultPadding = '14px 24px',
+  defaultMarginTop = 16,
+  defaultMarginBottom = 0,
+  fontMin = 10,
+  fontMax = 32,
+  verticalMax = 32,
+  horizontalMax = 48,
+  onFontSizeChange,
+  onPaddingChange,
+  onMarginTopChange,
+  onMarginBottomChange,
+}: {
+  fontSize: string;
+  padding: string;
+  marginTop?: string;
+  marginBottom?: string;
+  defaultFontSize?: string;
+  defaultPadding?: string;
+  defaultMarginTop?: number;
+  defaultMarginBottom?: number;
+  fontMin?: number;
+  fontMax?: number;
+  verticalMax?: number;
+  horizontalMax?: number;
+  onFontSizeChange: (value: string) => void;
+  onPaddingChange: (value: string) => void;
+  onMarginTopChange?: (value: string) => void;
+  onMarginBottomChange?: (value: string) => void;
+}) {
+  const btnPad = parseButtonPadding(padding || defaultPadding);
+  const fontPx = Number.parseInt(fontSize || defaultFontSize, 10) || Number.parseInt(defaultFontSize, 10) || 16;
+  const marginTopPx = parsePxValue(marginTop, defaultMarginTop);
+  const marginBottomPx = parsePxValue(marginBottom, defaultMarginBottom);
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+      <div>
+        <h3 className="text-xs font-bold text-gray-800">Buton Boyutu</h3>
+        <p className="mt-1 text-[11px] text-gray-500">Yazı boyutu, iç boşluk ve yazılardan aralığı ayarla.</p>
+      </div>
+      <RangeSlider
+        label="Yazı boyutu"
+        value={fontPx}
+        min={fontMin}
+        max={fontMax}
+        onChange={(value) => onFontSizeChange(`${value}px`)}
+      />
+      <RangeSlider
+        label="İç üst / alt"
+        value={btnPad.vertical}
+        min={4}
+        max={verticalMax}
+        onChange={(vertical) => onPaddingChange(formatButtonPadding(vertical, btnPad.horizontal))}
+      />
+      <RangeSlider
+        label="İç sağ / sol"
+        value={btnPad.horizontal}
+        min={8}
+        max={horizontalMax}
+        onChange={(horizontal) => onPaddingChange(formatButtonPadding(btnPad.vertical, horizontal))}
+      />
+      {onMarginTopChange ? (
+        <>
+          <RangeSlider
+            label="Üstten mesafe"
+            value={marginTopPx}
+            min={0}
+            max={80}
+            onChange={(value) => onMarginTopChange(`${value}px`)}
+          />
+          {onMarginBottomChange ? (
+            <RangeSlider
+              label="Alttan mesafe"
+              value={marginBottomPx}
+              min={0}
+              max={80}
+              onChange={(value) => onMarginBottomChange(`${value}px`)}
+            />
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function BrandColorPresets({ value, onSelect }: { value: string; onSelect: (color: string) => void }) {
+  return (
+    <div>
+      <span className="mb-2 block text-[11px] font-semibold text-gray-500">Hızlı renkler</span>
+      <div className="flex flex-wrap gap-2">
+        {BRAND_BG_PRESETS.map((preset) => {
+          const active = value.toLowerCase() === preset.color.toLowerCase();
+          return (
+            <button
+              key={preset.color}
+              type="button"
+              title={preset.label}
+              onClick={() => onSelect(preset.color)}
+              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-all ${
+                active ? 'border-[#ae256c] bg-[#fdf2f7] text-[#ae256c]' : 'border-gray-200 bg-white text-gray-600 hover:border-[#ae256c]/40'
+              }`}
+            >
+              <span className="h-4 w-4 shrink-0 rounded border border-black/10" style={{ background: preset.color }} />
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BlockBackgroundControls({ block }: { block: TemplateBlock }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const bg = getBlockBackground(block) || GISE_BRAND.contentBg;
+  const applyBg = (value: string) => updateBlock(block.id, (current) => setBlockBackground(current, value));
+
+  return (
+    <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 space-y-3">
+      <div>
+        <h3 className="text-xs font-bold text-gray-800">Blok Arka Planı</h3>
+        <p className="mt-1 text-[11px] text-gray-500">Seçili bloğun arka plan rengini buradan ayarla.</p>
+      </div>
+      <BrandColorPresets value={bg} onSelect={applyBg} />
+      <ColorField label="Arka plan rengi" value={bg} fallback={GISE_BRAND.contentBg} onChange={applyBg} />
+    </div>
+  );
+}
+
+function BlockSpacingControls({ block }: { block: TemplateBlock }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const paddingValue = getBlockPadding(block);
+  if (!paddingValue) return null;
+  const parsed = parsePadding(paddingValue);
+  const blockLabel = block.type === 'heading' ? 'Başlık Boşluğu' : 'Blok Boşluğu';
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+      <div>
+        <h3 className="text-xs font-bold text-gray-800">{blockLabel}</h3>
+        <p className="mt-1 text-[11px] text-gray-500">Üst ve alt boşlukları ayarla.</p>
+      </div>
+      <RangeSlider
+        label="Üst"
+        value={parsed.top}
+        min={0}
+        max={80}
+        onChange={(top) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            return setBlockPadding(current, updatePaddingVertical(currentPadding, top, parsePadding(currentPadding).bottom));
+          })
+        }
+      />
+      <RangeSlider
+        label="Alt"
+        value={parsed.bottom}
+        min={0}
+        max={80}
+        onChange={(bottom) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            return setBlockPadding(current, updatePaddingVertical(currentPadding, parsePadding(currentPadding).top, bottom));
+          })
+        }
+      />
+    </div>
+  );
+}
+
 function TemplateAppearanceControls({
   bgColor,
   contentBgColor,
@@ -94,11 +304,11 @@ function TemplateAppearanceControls({
         </div>
       ) : null}
       <div className="space-y-4">
-        <ColorField label="Dış arka plan rengi" value={bgColor} fallback="#f3f4f6" onChange={(value) => setSettings({ bgColor: value })} />
+        <ColorField label="Dış arka plan rengi" value={bgColor} fallback={GISE_BRAND.outerBg} onChange={(value) => setSettings({ bgColor: value })} />
         <ColorField
           label="İçerik arka plan rengi"
           value={contentBgColor}
-          fallback="#ffffff"
+          fallback={GISE_BRAND.contentBg}
           onChange={(value) => setSettings({ contentBgColor: value })}
         />
         {!compact ? (
@@ -134,10 +344,9 @@ function createGalleryImage(index: number): GalleryImage {
     src: '',
     alt: `Görsel ${index + 1}`,
     width: '100%',
-    caption: `Açıklama ${index + 1}`,
+    caption: '',
     showButton: true,
-    buttonText: 'Tıkla',
-    buttonUrl: 'https://example.com',
+    buttonText: 'Satın Al',
     buttonTarget: '_blank',
   };
 }
@@ -183,35 +392,10 @@ export default function Inspector() {
       </div>
 
       <div className="mt-4 space-y-4">
-        <TemplateAppearanceControls
-          bgColor={design.settings.bgColor}
-          contentBgColor={design.settings.contentBgColor}
-          contentWidth={design.settings.contentWidth}
-          fontFamily={design.settings.fontFamily}
-          setSettings={setSettings}
-          compact
-        />
+        <BlockBackgroundControls block={block} />
+        <BlockSpacingControls block={block} />
 
-        {block.type === 'heading' ? (
-          <>
-            <Field label="Başlık seviyesi">
-              <select
-                value={block.content.level}
-                onChange={(event) =>
-                  updateBlock(block.id, (current) =>
-                    current.type === 'heading' ? { ...current, content: { ...current.content, level: Number(event.target.value) as 1 | 2 | 3 } } : current,
-                  )
-                }
-                className={inputClass}
-              >
-                <option value={1}>H1</option>
-                <option value={2}>H2</option>
-                <option value={3}>H3</option>
-              </select>
-            </Field>
-            <TextStyleControls block={block} />
-          </>
-        ) : null}
+        {block.type === 'heading' ? <TextStyleControls block={block} /> : null}
 
         {block.type === 'text' ? <TextStyleControls block={block} /> : null}
 
@@ -268,7 +452,7 @@ export default function Inspector() {
             <button
               type="button"
               onClick={() => addButtonBelow(block.id)}
-              className="w-full rounded-xl bg-gradient-to-r from-[#2b2973] to-[#4a3f9f] px-4 py-2.5 text-sm font-semibold text-white hover:shadow-md transition-all"
+              className="w-full rounded-xl bg-gradient-to-r from-[#ae256c] to-[#20213f] px-4 py-2.5 text-sm font-semibold text-white hover:shadow-md transition-all"
             >
               Görselin Altına Buton Ekle
             </button>
@@ -328,18 +512,6 @@ export default function Inspector() {
               />
               <span className="mt-1 block text-xs text-gray-500">{block.style.imageWidth || '100%'}</span>
             </Field>
-            <Field label="Arka plan rengi">
-              <input
-                type="color"
-                value={block.style.bgColor}
-                onChange={(event) =>
-                  updateBlock(block.id, (current) =>
-                    current.type === 'hero' ? { ...current, style: { ...current.style, bgColor: event.target.value } } : current,
-                  )
-                }
-                className="h-10 w-full"
-              />
-            </Field>
             <Field label="Yazı rengi">
               <input
                 type="color"
@@ -352,18 +524,53 @@ export default function Inspector() {
                 className="h-10 w-full"
               />
             </Field>
+            <ButtonColorFields
+              bg={block.style.buttonBg ?? GISE_BRAND.primary}
+              color={block.style.buttonColor ?? GISE_BRAND.white}
+              bgFallback={GISE_BRAND.primary}
+              colorFallback={GISE_BRAND.white}
+              onBgChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonBg: value } } : current,
+                )
+              }
+              onColorChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonColor: value } } : current,
+                )
+              }
+            />
+            <ButtonSizeControls
+              fontSize={block.style.buttonFontSize ?? '15px'}
+              padding={block.style.buttonPadding ?? '13px 22px'}
+              marginTop={block.style.buttonMarginTop}
+              marginBottom={block.style.buttonMarginBottom}
+              defaultFontSize="15px"
+              defaultPadding="13px 22px"
+              defaultMarginTop={20}
+              defaultMarginBottom={0}
+              onFontSizeChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonFontSize: value } } : current,
+                )
+              }
+              onPaddingChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonPadding: value } } : current,
+                )
+              }
+              onMarginTopChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonMarginTop: value } } : current,
+                )
+              }
+              onMarginBottomChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonMarginBottom: value } } : current,
+                )
+              }
+            />
             <AlignControl block={block} />
-            <Field label="Padding">
-              <input
-                value={block.style.padding}
-                onChange={(event) =>
-                  updateBlock(block.id, (current) =>
-                    current.type === 'hero' ? { ...current, style: { ...current.style, padding: event.target.value } } : current,
-                  )
-                }
-                className={inputClass}
-              />
-            </Field>
           </>
         ) : null}
 
@@ -380,19 +587,39 @@ export default function Inspector() {
                 className={inputClass}
               />
             </Field>
-            <Field label="Buton rengi">
-              <input
-                type="color"
-                value={block.style.bg}
-                onChange={(event) =>
-                  updateBlock(block.id, (current) =>
-                    current.type === 'button' ? { ...current, style: { ...current.style, bg: event.target.value } } : current,
-                  )
-                }
-                className="h-10 w-full"
-              />
-            </Field>
-            <TextStyleControls block={block} />
+            <ButtonColorFields
+              bg={block.style.bg}
+              color={block.style.color}
+              bgFallback={GISE_BRAND.primary}
+              colorFallback={GISE_BRAND.white}
+              onBgChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, bg: value } } : current,
+                )
+              }
+              onColorChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, color: value } } : current,
+                )
+              }
+            />
+            <ButtonSizeControls
+              fontSize={block.style.fontSize}
+              padding={block.style.padding}
+              defaultFontSize="16px"
+              defaultPadding="14px 24px"
+              onFontSizeChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, fontSize: value } } : current,
+                )
+              }
+              onPaddingChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, padding: value } } : current,
+                )
+              }
+            />
+            <AlignControl block={block} />
           </>
         ) : null}
 
@@ -639,18 +866,52 @@ export default function Inspector() {
                 className="h-10 w-full"
               />
             </Field>
-            <Field label="Buton rengi">
-              <input
-                type="color"
-                value={block.style.buttonBg}
-                onChange={(event) =>
-                  updateBlock(block.id, (current) =>
-                    current.type === 'product' ? { ...current, style: { ...current.style, buttonBg: event.target.value } } : current,
-                  )
-                }
-                className="h-10 w-full"
-              />
-            </Field>
+            <ButtonColorFields
+              bg={block.style.buttonBg}
+              color={block.style.buttonColor}
+              bgFallback={GISE_BRAND.primary}
+              colorFallback={GISE_BRAND.white}
+              onBgChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonBg: value } } : current,
+                )
+              }
+              onColorChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonColor: value } } : current,
+                )
+              }
+            />
+            <ButtonSizeControls
+              fontSize={block.style.buttonFontSize ?? '15px'}
+              padding={block.style.buttonPadding ?? '13px 22px'}
+              marginTop={block.style.buttonMarginTop}
+              marginBottom={block.style.buttonMarginBottom}
+              defaultFontSize="15px"
+              defaultPadding="13px 22px"
+              defaultMarginTop={16}
+              defaultMarginBottom={0}
+              onFontSizeChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonFontSize: value } } : current,
+                )
+              }
+              onPaddingChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonPadding: value } } : current,
+                )
+              }
+              onMarginTopChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonMarginTop: value } } : current,
+                )
+              }
+              onMarginBottomChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonMarginBottom: value } } : current,
+                )
+              }
+            />
             <AlignControl block={block} />
           </>
         ) : null}
@@ -891,17 +1152,6 @@ function ImageStyleControls({ block }: { block: Extract<TemplateBlock, { type: '
           className={inputClass}
         />
       </Field>
-      <Field label="Padding">
-        <input
-          value={block.style.padding}
-          onChange={(event) =>
-            updateBlock(block.id, (current) =>
-              current.type === 'image' ? { ...current, style: { ...current.style, padding: event.target.value } } : current,
-            )
-          }
-          className={inputClass}
-        />
-      </Field>
       <AlignControl block={block} />
       <Field label="Alt yazı rengi">
         <input
@@ -932,6 +1182,7 @@ function ImageStyleControls({ block }: { block: Extract<TemplateBlock, { type: '
 
 function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gallery' }> }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const captionsRequired = galleryCaptionsEnabled(block);
 
   return (
     <>
@@ -983,7 +1234,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
             <span className="mb-1 block text-[11px] font-semibold text-gray-500">Buton rengi</span>
             <input
               type="color"
-              value={block.style.buttonBg ?? '#2b2973'}
+              value={colorPickerValue(block.style.buttonBg ?? '', GISE_BRAND.primary)}
               onChange={(event) =>
                 updateBlock(block.id, (current) =>
                   current.type === 'gallery'
@@ -995,10 +1246,10 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Yazı rengi</span>
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Buton yazı rengi</span>
             <input
               type="color"
-              value={block.style.buttonColor ?? '#ffffff'}
+              value={colorPickerValue(block.style.buttonColor ?? '', GISE_BRAND.white)}
               onChange={(event) =>
                 updateBlock(block.id, (current) =>
                   current.type === 'gallery'
@@ -1010,39 +1261,40 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
             />
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Yazı boyutu</span>
-            <input
-              value={block.style.buttonFontSize ?? '12px'}
-              onChange={(event) =>
-                updateBlock(block.id, (current) =>
-                  current.type === 'gallery'
-                    ? { ...current, style: { ...current.style, buttonFontSize: event.target.value } }
-                    : current,
-                )
-              }
-              className={inputClass}
-              placeholder="12px"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold text-gray-500">İç boşluk</span>
-            <input
-              value={block.style.buttonPadding ?? '8px 12px'}
-              onChange={(event) =>
-                updateBlock(block.id, (current) =>
-                  current.type === 'gallery'
-                    ? { ...current, style: { ...current.style, buttonPadding: event.target.value } }
-                    : current,
-                )
-              }
-              className={inputClass}
-              placeholder="8px 12px"
-            />
-          </label>
-        </div>
       </div>
+      <ButtonSizeControls
+        fontSize={block.style.buttonFontSize ?? '12px'}
+        padding={block.style.buttonPadding ?? '8px 12px'}
+        marginTop={block.style.buttonMarginTop}
+        marginBottom={block.style.buttonMarginBottom}
+        defaultFontSize="12px"
+        defaultPadding="8px 12px"
+        defaultMarginTop={8}
+        defaultMarginBottom={0}
+        fontMax={24}
+        verticalMax={24}
+        horizontalMax={32}
+        onFontSizeChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonFontSize: value } } : current,
+          )
+        }
+        onPaddingChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonPadding: value } } : current,
+          )
+        }
+        onMarginTopChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonMarginTop: value } } : current,
+          )
+        }
+        onMarginBottomChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonMarginBottom: value } } : current,
+          )
+        }
+      />
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
         <div className="text-xs font-bold text-gray-600">Görsel URL, Link ve Butonlar</div>
         {block.content.images.slice(0, block.style.columns).map((image, index) => (
@@ -1117,25 +1369,24 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
             <input
               value={image.caption || ''}
               onChange={(event) =>
-                updateBlock(block.id, (current) =>
-                  current.type === 'gallery'
-                    ? {
-                        ...current,
-                        content: {
-                          ...current.content,
-                          images: current.content.images.map((item) =>
-                            item.id === image.id ? { ...item, caption: event.target.value } : item,
-                          ),
-                        },
-                      }
-                    : current,
-                )
+                updateBlock(block.id, (current) => {
+                  if (current.type !== 'gallery') return current;
+                  const images = current.content.images.map((item) =>
+                    item.id === image.id ? { ...item, caption: event.target.value } : item,
+                  );
+                  const visible = images.slice(0, current.style.columns);
+                  const captionsEnabled = visible.some((item) => Boolean(item.caption?.trim()));
+                  return {
+                    ...current,
+                    content: { ...current.content, images, captionsEnabled },
+                  };
+                })
               }
               className={inputClass}
-              placeholder="Alt yazı"
+              placeholder={captionsRequired ? 'Alt yazı (zorunlu)' : 'Alt yazı (opsiyonel)'}
             />
             <input
-              value={image.buttonText ?? 'Tıkla'}
+              value={image.buttonText ?? 'Satın Al'}
               onChange={(event) =>
                 updateBlock(block.id, (current) =>
                   current.type === 'gallery'
@@ -1174,7 +1425,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                 )
               }
               className={inputClass}
-              placeholder="Buton linki: https://..."
+              placeholder="Buton linki (boşsa görsel linki kullanılır): https://..."
             />
             <label className="flex items-center gap-2 text-xs text-gray-600">
               <input
