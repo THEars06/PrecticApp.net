@@ -4,7 +4,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { BlockType } from './types';
 
 const blocks: Array<{ type: BlockType; label: string; description: string }> = [
-  { type: 'heading', label: 'Başlık', description: 'H1/H2/H3 metin' },
+  { type: 'heading', label: 'Başlık', description: 'Kalın metin başlığı' },
   { type: 'text', label: 'Metin', description: 'Paragraf içeriği' },
   { type: 'image', label: 'Görsel', description: 'Fotoğraf — seçince altına buton ekleyebilirsin' },
   { type: 'button', label: 'Buton', description: 'CTA butonu — canvas\'a sürükle' },
@@ -31,7 +31,7 @@ function PaletteItem({ type, label, description }: { type: BlockType; label: str
       style={{
         transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
       }}
-      className={`w-full rounded-xl border border-gray-200 bg-white p-3 text-left transition-all hover:border-[#2b2973] hover:shadow-sm ${
+      className={`w-full rounded-xl border border-gray-200 bg-white p-3 text-left transition-all hover:border-[#ae256c] hover:shadow-sm ${
         isDragging ? 'opacity-50' : ''
       }`}
     >

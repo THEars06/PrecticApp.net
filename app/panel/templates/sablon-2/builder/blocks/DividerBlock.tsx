@@ -5,7 +5,7 @@ import BlockFrame from './BlockFrame';
 
 export default function DividerBlock({ block }: { block: DividerBlockType }) {
   return (
-    <BlockFrame id={block.id} label="Ayırıcı">
+    <BlockFrame id={block.id} label="Ayırıcı" backgroundColor={block.style.blockBg}>
       <div style={{ padding: block.style.padding }}>
         <div style={{ borderTop: `${block.style.thickness} solid ${block.style.color}` }} />
       </div>

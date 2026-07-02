@@ -27,19 +27,27 @@ export type BaseBlock = {
 export type HeadingBlock = BaseBlock & {
   type: 'heading';
   content: { text: string; level: 1 | 2 | 3 };
-  style: { color: string; align: TextAlign; fontSize: string };
+  style: { color: string; align: TextAlign; fontSize: string; padding: string; blockBg?: string };
 };
 
 export type TextBlock = BaseBlock & {
   type: 'text';
   content: { html: string };
-  style: { color: string; fontSize: string; lineHeight: string; align: TextAlign };
+  style: { color: string; fontSize: string; lineHeight: string; align: TextAlign; padding: string; blockBg?: string };
 };
 
 export type ImageBlock = BaseBlock & {
   type: 'image';
   content: { src: string; alt: string; caption?: string; link?: string; linkTarget?: LinkTarget };
-  style: { width: string; align: TextAlign; borderRadius: string; padding: string; captionColor: string; captionFontSize: string };
+  style: {
+    width: string;
+    align: TextAlign;
+    borderRadius: string;
+    padding: string;
+    captionColor: string;
+    captionFontSize: string;
+    blockBg?: string;
+  };
 };
 
 export type GalleryImage = {
@@ -60,6 +68,7 @@ export type GalleryBlock = BaseBlock & {
   content: {
     images: GalleryImage[];
     showButtons?: boolean;
+    captionsEnabled?: boolean;
   };
   style: {
     columns: GalleryColumns;
@@ -76,19 +85,24 @@ export type GalleryBlock = BaseBlock & {
     buttonRadius: string;
     buttonFontSize: string;
     buttonPadding: string;
+    buttonMarginTop?: string;
+    buttonMarginBottom?: string;
+    blockBg?: string;
+    cropAspect?: number;
+    imageAspectRatio?: string;
   };
 };
 
 export type HeroBlock = BaseBlock & {
   type: 'hero';
   content: { image?: string; title: string; subtitle?: string; buttonText?: string; buttonUrl?: string };
-  style: { bgColor: string; textColor: string; align: TextAlign; padding: string; borderRadius: string; imageWidth?: string };
+  style: { bgColor: string; textColor: string; buttonBg?: string; buttonColor?: string; buttonFontSize?: string; buttonPadding?: string; buttonMarginTop?: string; buttonMarginBottom?: string; align: TextAlign; padding: string; borderRadius: string; imageWidth?: string };
 };
 
 export type ButtonBlock = BaseBlock & {
   type: 'button';
   content: { text: string; url: string; target: LinkTarget };
-  style: { bg: string; color: string; borderRadius: string; padding: string; align: TextAlign; fontSize: string };
+  style: { bg: string; color: string; borderRadius: string; padding: string; align: TextAlign; fontSize: string; blockBg?: string; blockPadding?: string };
 };
 
 export type CouponBlock = BaseBlock & {
@@ -136,6 +150,10 @@ export type ProductBlock = BaseBlock & {
     priceColor: string;
     buttonBg: string;
     buttonColor: string;
+    buttonFontSize?: string;
+    buttonPadding?: string;
+    buttonMarginTop?: string;
+    buttonMarginBottom?: string;
     align: TextAlign;
     padding: string;
     borderRadius: string;
@@ -170,19 +188,19 @@ export type SocialBlock = BaseBlock & {
 export type DividerBlock = BaseBlock & {
   type: 'divider';
   content: Record<string, never>;
-  style: { color: string; thickness: string; padding: string };
+  style: { color: string; thickness: string; padding: string; blockBg?: string };
 };
 
 export type SpacerBlock = BaseBlock & {
   type: 'spacer';
   content: Record<string, never>;
-  style: { height: string };
+  style: { height: string; padding?: string };
 };
 
 export type ColumnsBlock = BaseBlock & {
   type: 'columns';
   content: { left: TemplateBlock[]; right: TemplateBlock[] };
-  style: { gap: string; padding: string; stackOnMobile: boolean };
+  style: { gap: string; padding: string; stackOnMobile: boolean; blockBg?: string };
 };
 
 export type TemplateBlock =

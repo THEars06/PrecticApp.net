@@ -53,7 +53,7 @@ export default function EditTemplate2Page({ params }: { params: Promise<{ id: st
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#2b2973] border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#ae256c] border-t-transparent" />
       </div>
     );
   }
@@ -67,7 +67,7 @@ export default function EditTemplate2Page({ params }: { params: Promise<{ id: st
           <Link href="/panel/templates" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">
             Listeye Dön
           </Link>
-          <Link href={`/panel/templates/${id}`} className="rounded-xl bg-[#2b2973] px-4 py-2 text-sm font-semibold text-white">
+          <Link href={`/panel/templates/${id}`} className="rounded-xl bg-[#ae256c] px-4 py-2 text-sm font-semibold text-white">
             Eski Editörde Aç
           </Link>
         </div>

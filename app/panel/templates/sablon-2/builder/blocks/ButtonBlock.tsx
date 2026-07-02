@@ -10,8 +10,8 @@ export default function ButtonBlock({ block }: { block: ButtonBlockType }) {
   const device = useTemplate2Store((state) => state.deviceMode);
 
   return (
-    <BlockFrame id={block.id} label="Buton">
-      <div className={device === 'mobile' ? 'px-2 py-3' : 'px-6 py-4'} style={{ textAlign: block.style.align }}>
+    <BlockFrame id={block.id} label="Buton" backgroundColor={block.style.blockBg}>
+      <div style={{ textAlign: block.style.align, padding: block.style.blockPadding || '16px 24px' }}>
         <a
           href={block.content.url || '#'}
           target={block.content.target}

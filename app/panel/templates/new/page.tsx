@@ -93,7 +93,7 @@ export default function NewTemplatePage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Mail Konusu</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mail Başlığı</label>
               <input
                 type="text"
                 value={subject}
@@ -103,12 +103,12 @@ export default function NewTemplatePage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mail Şablonu Açıklaması</label>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
-                placeholder="Şablon açıklaması..."
+                placeholder="Mail şablonunun açıklaması..."
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all resize-none text-gray-900"
               />
             </div>

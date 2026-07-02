@@ -11,6 +11,7 @@ import { saveTemplate2, previewTemplate2 } from './api';
 import { useTemplate2Store } from './store';
 import { BlockType } from './types';
 import { validateDesign, validateMeta } from './validators';
+import { ImageUploadProvider } from './ImageUploadContext';
 import { MOBILE_PREVIEW_WIDTH } from './DeviceFrame';
 
 type Props = {
@@ -111,6 +112,7 @@ export default function Builder({ templateId, draftKey }: Props) {
   };
 
   return (
+    <ImageUploadProvider>
     <div className="flex h-[calc(100vh-180px)] min-h-[560px] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4">
         <button
@@ -123,7 +125,7 @@ export default function Builder({ templateId, draftKey }: Props) {
             <div className="text-sm font-bold text-gray-900">{meta.name || 'Şablon 2'}</div>
             <div className="text-xs text-gray-500">{meta.subject || 'Konu girilmedi'}</div>
           </div>
-          <svg className="h-4 w-4 text-gray-400 group-hover:text-[#2b2973]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4 text-gray-400 group-hover:text-[#ae256c]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
         </button>
@@ -145,7 +147,7 @@ export default function Builder({ templateId, draftKey }: Props) {
             type="button"
             onClick={handlePreview}
             disabled={previewing}
-            className="rounded-lg border border-[#2b2973] px-3 py-2 text-xs font-semibold text-[#2b2973] hover:bg-purple-50 disabled:opacity-50"
+            className="rounded-lg border border-[#ae256c] px-3 py-2 text-xs font-semibold text-[#ae256c] hover:bg-purple-50 disabled:opacity-50"
           >
             {previewing ? 'Hazırlanıyor' : 'Email Önizleme'}
           </button>
@@ -153,7 +155,7 @@ export default function Builder({ templateId, draftKey }: Props) {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-lg bg-[#2b2973] px-4 py-2 text-xs font-bold text-white hover:bg-[#1f1d5c] disabled:opacity-50"
+            className="rounded-lg bg-[#ae256c] px-4 py-2 text-xs font-bold text-white hover:bg-[#8a1d56] disabled:opacity-50"
           >
             {saving ? 'Kaydediliyor' : 'Kaydet'}
           </button>
@@ -187,28 +189,28 @@ export default function Builder({ templateId, draftKey }: Props) {
                 <input
                   value={meta.name}
                   onChange={(event) => setMeta({ name: event.target.value })}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#ae256c]"
                   placeholder="Örn: Mayıs Kampanyası"
                   autoFocus
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Konusu</span>
+                <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Başlığı</span>
                 <input
                   value={meta.subject}
                   onChange={(event) => setMeta({ subject: event.target.value })}
-                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#ae256c]"
                   placeholder="Örn: Sana özel fırsatlar"
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-gray-700">Açıklama</span>
+                <span className="mb-1 block text-sm font-semibold text-gray-700">Mail Şablonu Açıklaması</span>
                 <textarea
                   value={meta.description}
                   onChange={(event) => setMeta({ description: event.target.value })}
                   rows={3}
-                  className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#2b2973]"
-                  placeholder="Bu şablon ne için kullanılacak?"
+                  className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-[#ae256c]"
+                  placeholder="Mail şablonunun açıklaması..."
                 />
               </label>
             </div>
@@ -216,7 +218,7 @@ export default function Builder({ templateId, draftKey }: Props) {
               <button
                 type="button"
                 onClick={() => setInfoModal(false)}
-                className="rounded-xl bg-[#2b2973] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#1f1d5c]"
+                className="rounded-xl bg-[#ae256c] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#8a1d56]"
               >
                 Tamam
               </button>
@@ -255,5 +257,6 @@ export default function Builder({ templateId, draftKey }: Props) {
         </div>
       ) : null}
     </div>
+    </ImageUploadProvider>
   );
 }
