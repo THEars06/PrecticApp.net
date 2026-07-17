@@ -40,7 +40,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Sidebar */}
       <Sidebar
         collapsed={sidebarCollapsed}
