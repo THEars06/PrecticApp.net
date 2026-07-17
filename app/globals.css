@@ -19,6 +19,18 @@ body {
   font-family: var(--font-poppins), 'Poppins', sans-serif;
 }
 
+/* Panel / form alanlari: body foreground acik renk oldugu icin inputlar beyaz yazi kalmasin */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+textarea,
+select {
+  color: #111827;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af;
+}
+
 /* 3D Card Styles */
 .card-3d {
   transform-style: preserve-3d;

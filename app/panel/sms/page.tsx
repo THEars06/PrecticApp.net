@@ -1,0 +1,1615 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+const GISE_KUPON_API_URL = process.env.NEXT_PUBLIC_GISE_KUPON_API_URL || 'http://localhost:3001';
+const SMS_MAX_CHARS = 480;
+const DEFAULT_BATCH_LIMIT = 10000;
+const DEFAULT_INTERVAL_HOURS = '0.5';
+
+const mockCampaigns = {
+  gise: [
+    { id: '1', name: 'Yılbaşı Konseri 2024', userCount: 1250 },
+    { id: '2', name: 'Tiyatro Festivali', userCount: 890 },
+    { id: '3', name: 'Stand-up Gecesi', userCount: 456 },
+    { id: '4', name: 'Caz Festivali', userCount: 2100 },
+    { id: '5', name: 'Rock Konseri', userCount: 3200 },
+    { id: '6', name: 'Bale Gösterisi', userCount: 780 },
+  ],
+};
+
+
+type SmsTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  textContent: string;
+  isActive: boolean;
+};
+
+type SmsProvider = { id: string; name: string; type: string; isDefault: boolean };
+
+type User = {
+  id: string;
+  email: string;
+  fullName: string | null;
+  phoneNumber?: string | null;
+};
+
+type Platform = 'gise' | 'kupon' | null;
+type Campaign = { id: string; name: string; userCount: number };
+
+type SendResultModal = {
+  type: 'success' | 'error';
+  title: string;
+  lines?: string[];
+  message?: string;
+  logId?: string;
+};
+
+function personalizePreview(text: string) {
+  return text
+    .replace(/\{\{\s*fullName\s*\}\}/gi, 'Ahmet Yılmaz')
+    .replace(/\{\{\s*firstName\s*\}\}/gi, 'Ahmet')
+    .replace(/\{\{\s*email\s*\}\}/gi, 'ahmet@mail.com')
+    .replace(/\{\{\s*phoneNumber\s*\}\}/gi, '905551234567');
+}
+
+export default function SmsPage() {
+  const router = useRouter();
+  const [currentStep, setCurrentStep] = useState(1);
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform>(null);
+  const [label, setLabel] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [selectedCampaigns, setSelectedCampaigns] = useState<Campaign[]>([]);
+  const [draggedCampaign, setDraggedCampaign] = useState<Campaign | null>(null);
+
+  const [userList, setUserList] = useState<User[]>([]);
+  const [userPage, setUserPage] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const [hasMoreUsers, setHasMoreUsers] = useState(true);
+  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [loadingMoreUsers, setLoadingMoreUsers] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [useAllUsers, setUseAllUsers] = useState(false);
+  const [allUsersCount, setAllUsersCount] = useState(0);
+  const userListRef = useRef<HTMLDivElement>(null);
+  const scrollSentinelRef = useRef<HTMLDivElement>(null);
+
+  const [templates, setTemplates] = useState<SmsTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
+  const [providers, setProviders] = useState<SmsProvider[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sendResultModal, setSendResultModal] = useState<SendResultModal | null>(null);
+
+  const [schedulingExtraOpen, setSchedulingExtraOpen] = useState(false);
+  const [dailyLimit, setDailyLimit] = useState('');
+  const [intervalHours, setIntervalHours] = useState(DEFAULT_INTERVAL_HOURS);
+  const [scheduleMode, setScheduleMode] = useState<'immediate' | 'startDate' | 'manual'>('immediate');
+  const [startAt, setStartAt] = useState('');
+  const [manualSchedules, setManualSchedules] = useState<string[]>([]);
+
+  const [kuponCampaigns, setKuponCampaigns] = useState<Campaign[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [campaignSearch, setCampaignSearch] = useState('');
+  const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
+
+  const fetchUsers = useCallback(async (search: string, page: number, append: boolean) => {
+    if (page === 1) setLoadingUsers(true);
+    else setLoadingMoreUsers(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const params = new URLSearchParams({ search, limit: '50', page: String(page) });
+      const response = await fetch(`${API_URL}/users?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const incoming: User[] = data.data ?? [];
+        const total: number = data.total ?? 0;
+        setUserTotal(total);
+        setUserList((prev) => {
+          if (!append) return incoming;
+          const seen = new Set(prev.map((u) => u.email.toLowerCase()));
+          return [...prev, ...incoming.filter((u) => !seen.has(u.email.toLowerCase()))];
+        });
+        setHasMoreUsers(page * 50 < total);
+      }
+    } catch (error) {
+      console.error('Kullanıcılar yüklenirken hata:', error);
+    } finally {
+      setLoadingUsers(false);
+      setLoadingMoreUsers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers('', 1, false);
+  }, [fetchUsers]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setUserPage(1);
+      fetchUsers(userSearch, 1, false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [userSearch, fetchUsers]);
+
+  const loadMoreRef = useRef<(() => void) | null>(null);
+  loadMoreRef.current = () => {
+    if (!hasMoreUsers || loadingMoreUsers || loadingUsers) return;
+    const nextPage = userPage + 1;
+    setUserPage(nextPage);
+    fetchUsers(userSearch, nextPage, true);
+  };
+
+  useEffect(() => {
+    const sentinel = scrollSentinelRef.current;
+    const container = userListRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMoreRef.current?.();
+      },
+      { root: container, threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoadingTemplates(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const [tRes, pRes] = await Promise.all([
+          fetch(`${API_URL}/sms/templates`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_URL}/sms/providers`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        if (tRes.ok) setTemplates(await tRes.json());
+        if (pRes.ok) {
+          const data = await pRes.json();
+          setProviders(data);
+          const def = data.find((p: SmsProvider) => p.isDefault);
+          if (def) setSelectedProvider(def.id);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (selectedPlatform === 'kupon') {
+      const fetchKuponCampaigns = async () => {
+        setLoadingCampaigns(true);
+        try {
+          const response = await fetch(`${GISE_KUPON_API_URL}/campaigns/public`);
+          if (response.ok) {
+            const campaigns = await response.json();
+            const formattedCampaigns = campaigns.map((c: { id: string; title: string; _count?: { coupons?: number } }) => ({
+              id: c.id,
+              name: c.title,
+              userCount: c._count?.coupons || 0,
+            }));
+            setKuponCampaigns(formattedCampaigns);
+          }
+        } catch {
+          // Kupon API çalışmıyor olabilir
+        } finally {
+          setLoadingCampaigns(false);
+        }
+      };
+      fetchKuponCampaigns();
+    }
+  }, [selectedPlatform]);
+
+  const fetchCampaignUsers = async (campaignId: string) => {
+    if (selectedPlatform !== 'kupon') return;
+    if (campaignUsers[campaignId]) return;
+
+    try {
+      const response = await fetch(`${GISE_KUPON_API_URL}/campaigns/public/${campaignId}/users`);
+      if (response.ok) {
+        const data = await response.json();
+        const users: User[] = data.users.map((u: { email: string; fullName?: string | null; phoneNumber?: string | null }, index: number) => ({
+          id: `campaign-${campaignId}-${index}`,
+          email: u.email,
+          fullName: u.fullName || null,
+          phoneNumber: u.phoneNumber || null,
+        }));
+        setCampaignUsers((prev) => ({ ...prev, [campaignId]: users }));
+        setSelectedUsers((prev) => {
+          const newUsers = users.filter((u) => !prev.find((su) => su.email === u.email));
+          return [...prev, ...newUsers];
+        });
+      }
+    } catch (error) {
+      console.error('Kampanya kullanıcıları yüklenirken hata:', error);
+    }
+  };
+
+  const handleAddAll = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(
+        `${API_URL}/users/count?search=${encodeURIComponent(userSearch)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setAllUsersCount(data.total ?? 0);
+        setUseAllUsers(true);
+        setSelectedUsers([]);
+        setSelectedCampaigns([]);
+        setCampaignUsers({});
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const clearAllUsers = () => {
+    setUseAllUsers(false);
+    setAllUsersCount(0);
+  };
+
+  const availableCampaigns =
+    selectedPlatform === 'gise'
+      ? mockCampaigns.gise
+      : selectedPlatform === 'kupon'
+        ? kuponCampaigns
+        : [];
+
+  const filteredCampaigns = availableCampaigns
+    .filter((c) => !selectedCampaigns.find((sc) => sc.id === c.id))
+    .filter(
+      (c) =>
+        campaignSearch === '' ||
+        c.name.toLowerCase().includes(campaignSearch.toLowerCase()),
+    );
+
+  const selectedEmails = selectedUsers.map((u) => u.email.toLowerCase());
+  const filteredUsers = userList.filter(
+    (u) =>
+      !selectedEmails.includes(u.email.toLowerCase()) &&
+      u.phoneNumber &&
+      String(u.phoneNumber).trim(),
+  );
+
+  const totalUsers = useAllUsers
+    ? allUsersCount
+    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
+
+  const totalSteps = 4;
+
+  const handleDragStart = (campaign: Campaign) => {
+    setDraggedCampaign(campaign);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedCampaign && !selectedCampaigns.find((c) => c.id === draggedCampaign.id)) {
+      setSelectedCampaigns([...selectedCampaigns, draggedCampaign]);
+      if (selectedPlatform === 'kupon') {
+        fetchCampaignUsers(draggedCampaign.id);
+      }
+    }
+    setDraggedCampaign(null);
+  };
+
+  const removeCampaign = (id: string) => {
+    setSelectedCampaigns(selectedCampaigns.filter((c) => c.id !== id));
+    if (campaignUsers[id]) {
+      const emailsToRemove = campaignUsers[id].map((u) => u.email);
+      setSelectedUsers((prev) => prev.filter((u) => !emailsToRemove.includes(u.email)));
+    }
+  };
+
+  const addAllCampaigns = () => {
+    setSelectedCampaigns(availableCampaigns);
+    if (selectedPlatform === 'kupon') {
+      availableCampaigns.forEach((c) => fetchCampaignUsers(c.id));
+    }
+  };
+
+  const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
+
+  const canProceed = () => {
+    switch (currentStep) {
+      case 1:
+        return selectedPlatform !== null;
+      case 2:
+        return (
+          selectedCampaigns.length > 0 ||
+          selectedUsers.length > 0 ||
+          (useAllUsers && allUsersCount > 0)
+        );
+      case 3:
+        return selectedTemplate !== null;
+      case 4:
+        return selectedProvider !== null;
+      default:
+        return false;
+    }
+  };
+
+  const handleSend = async () => {
+    if (!selectedTemplate || !selectedProvider) return;
+    setSending(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const body: any = {
+        label: label || selectedTemplateObj?.name || 'SMS Kampanyası',
+        templateId: selectedTemplate,
+        providerId: selectedProvider,
+        platform: selectedPlatform,
+      };
+
+      if (useAllUsers) {
+        body.selectAll = true;
+        body.audienceFilters = { isActive: true };
+        if (selectedPlatform) body.audienceFilters.platform = selectedPlatform;
+      } else {
+        const uuidRe =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        body.recipients = selectedUsers.flatMap((u) => {
+          if (uuidRe.test(u.id)) return [u.id];
+          if (u.phoneNumber && String(u.phoneNumber).trim()) {
+            return [String(u.phoneNumber).trim()];
+          }
+          return [];
+        });
+      }
+
+      const effectiveRecipientCount = useAllUsers
+        ? allUsersCount
+        : (body.recipients?.length ?? 0);
+
+      const limitNum = schedulingExtraOpen
+        ? parseInt(dailyLimit)
+        : DEFAULT_BATCH_LIMIT;
+      const effectiveScheduleMode = schedulingExtraOpen ? scheduleMode : 'immediate';
+      const effectiveIntervalHours = schedulingExtraOpen ? intervalHours : DEFAULT_INTERVAL_HOURS;
+
+      if (limitNum > 0 && limitNum < effectiveRecipientCount) {
+        body.dailyLimit = limitNum;
+        body.scheduleMode = effectiveScheduleMode;
+
+        if (effectiveScheduleMode === 'immediate') {
+          const intervalNum = parseFloat(effectiveIntervalHours);
+          if (intervalNum > 0) {
+            body.intervalHours = intervalNum;
+          }
+        } else if (effectiveScheduleMode === 'startDate') {
+          if (startAt) {
+            body.startAt = new Date(startAt).toISOString();
+          }
+          const intervalNum = parseFloat(effectiveIntervalHours);
+          if (intervalNum > 0) {
+            body.intervalHours = intervalNum;
+          }
+        } else if (effectiveScheduleMode === 'manual') {
+          body.scheduleTimes = manualSchedules
+            .filter((dt) => dt)
+            .map((dt) => new Date(dt).toISOString());
+        }
+      }
+
+      const response = await fetch(`${API_URL}/sms/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        const lines: string[] = [`Toplam alıcı: ${result.totalRecipients}`];
+        if (result.excludedUnsubscribed > 0) {
+          lines.push(`Abonelikten çıkan (hariç tutulan): ${result.excludedUnsubscribed}`);
+        }
+        if (result.sentNow > 0) {
+          lines.push(`Hemen gönderilen: ${result.sentNow}`);
+          lines.push(`Başarılı: ${result.successCount}`);
+          lines.push(`Başarısız: ${result.failCount}`);
+        }
+        if (result.queued > 0 && result.schedule?.length > 0) {
+          lines.push(`Kuyrukta bekleyen: ${result.queued}`);
+          lines.push(`Zamanlanan batch sayısı: ${result.schedule.length}`);
+          const nextDate = new Date(result.schedule[0].scheduledAt);
+          lines.push(`İlk zamanlanmış gönderim: ${nextDate.toLocaleString('tr-TR')}`);
+          if (result.schedule.length > 1) {
+            const lastDate = new Date(result.schedule[result.schedule.length - 1].scheduledAt);
+            lines.push(`Son gönderim: ${lastDate.toLocaleString('tr-TR')}`);
+          }
+        }
+        setCurrentStep(1);
+        setSelectedCampaigns([]);
+        setSelectedUsers([]);
+        setUseAllUsers(false);
+        setAllUsersCount(0);
+        setLabel('');
+        setSelectedTemplate(null);
+        setSchedulingExtraOpen(false);
+        setDailyLimit('');
+        setIntervalHours(DEFAULT_INTERVAL_HOURS);
+        setScheduleMode('immediate');
+        setStartAt('');
+        setManualSchedules([]);
+        setSendResultModal({
+          type: 'success',
+          title: result.queued > 0 ? 'Gönderim Planlandı' : 'SMS Gönderildi',
+          lines,
+          logId: result.logId,
+        });
+      } else {
+        setSendResultModal({
+          type: 'error',
+          title: 'Gönderim Başarısız',
+          message: result.message || 'SMS gönderilemedi',
+        });
+      }
+    } catch (error) {
+      console.error('SMS gönderilirken hata:', error);
+      setSendResultModal({
+        type: 'error',
+        title: 'Hata',
+        message: 'Bir hata oluştu. Lütfen tekrar deneyin.',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Toplu SMS Gönderimi</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Posta Güvercini ile toplu SMS gönderimi
+          </p>
+        </div>
+        <Link
+          href="/panel/sms-templates"
+          className="text-sm font-medium text-[#2b2973] hover:underline"
+        >
+          SMS Şablonları →
+        </Link>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        {/* Progress Steps — tıklanamaz, sadece Geri/İleri ile geçilir */}
+        <div className="flex items-center justify-between mb-8">
+          {[
+            {
+              step: 1,
+              title: 'Platform',
+              icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+            },
+            {
+              step: 2,
+              title: 'Hedef Kitle',
+              icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
+            },
+            {
+              step: 3,
+              title: 'Şablon',
+              icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
+            },
+            {
+              step: 4,
+              title: 'Gönderim',
+              icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8',
+            },
+          ].map((item, index) => (
+            <div key={item.step} className="flex items-center">
+              <div className="flex flex-col items-center">
+                <div
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${
+                    currentStep === item.step
+                      ? 'bg-[#2b2973] text-white'
+                      : currentStep > item.step
+                        ? 'bg-green-100 text-green-600'
+                        : 'bg-gray-100 text-gray-400'
+                  }`}
+                >
+                  {currentStep > item.step ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                    </svg>
+                  )}
+                </div>
+                <span
+                  className={`text-xs mt-2 font-medium ${
+                    currentStep === item.step ? 'text-[#2b2973]' : 'text-gray-500'
+                  }`}
+                >
+                  {item.title}
+                </span>
+              </div>
+              {index < 3 && (
+                <div
+                  className={`w-12 lg:w-20 h-0.5 mx-2 rounded-full ${
+                    currentStep > item.step ? 'bg-green-400' : 'bg-gray-200'
+                  }`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="min-h-[400px]">
+          {currentStep === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Platform Seçin</h2>
+              <p className="text-sm text-gray-500">SMS göndermek istediğiniz platformu seçin</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlatform('gise')}
+                  className={`relative p-8 rounded-2xl border-2 transition-all flex items-center justify-center ${
+                    selectedPlatform === 'gise'
+                      ? 'border-[#a02073] bg-pink-50'
+                      : 'border-gray-200 hover:border-[#a02073] hover:bg-pink-50/50'
+                  }`}
+                >
+                  <Image src="/GPW.png" alt="Gişe Kıbrıs" width={200} height={60} className="h-50 w-auto" />
+                  {selectedPlatform === 'gise' && (
+                    <div className="absolute top-4 right-4 w-6 h-6 bg-[#a02073] rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlatform('kupon')}
+                  className={`relative p-8 rounded-2xl border-2 transition-all flex items-center justify-center ${
+                    selectedPlatform === 'kupon'
+                      ? 'border-[#2aa146] bg-green-50'
+                      : 'border-gray-200 hover:border-[#2aa146] hover:bg-green-50/50'
+                  }`}
+                >
+                  <Image src="/KKW.png" alt="Kupon Kıbrıs" width={200} height={200} className="h-50 w-auto" />
+                  {selectedPlatform === 'kupon' && (
+                    <div className="absolute top-4 right-4 w-6 h-6 bg-[#2aa146] rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {currentStep === 2 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Hedef Kitle Seçimi</h2>
+                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addAllCampaigns}
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  Tümünü Ekle
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full" />
+                    Mevcut Kampanyalar ({availableCampaigns.length})
+                    {loadingCampaigns && (
+                      <span className="ml-2 text-xs text-gray-400">Yükleniyor...</span>
+                    )}
+                  </h3>
+
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Kampanya ara..."
+                      value={campaignSearch}
+                      onChange={(e) => setCampaignSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 text-gray-900"
+                    />
+                    {campaignSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setCampaignSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-4 min-h-[200px] max-h-[300px] overflow-y-auto space-y-2">
+                    {loadingCampaigns ? (
+                      <div className="h-full flex items-center justify-center py-8">
+                        <svg className="animate-spin h-6 w-6 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    ) : filteredCampaigns.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                        {campaignSearch ? 'Aramanızla eşleşen kampanya bulunamadı' : availableCampaigns.length === 0 ? 'Kampanya bulunamadı' : 'Tüm kampanyalar seçildi'}
+                      </div>
+                    ) : (
+                      filteredCampaigns.map((campaign) => (
+                        <div
+                          key={campaign.id}
+                          draggable
+                          onDragStart={() => handleDragStart(campaign)}
+                          className="bg-white p-3 rounded-lg border border-gray-200 cursor-grab active:cursor-grabbing hover:border-purple-300 hover:shadow-sm transition-all flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="font-medium text-gray-900 text-sm">{campaign.name}</p>
+                            <p className="text-xs text-gray-500">{campaign.userCount.toLocaleString()} kullanıcı</p>
+                          </div>
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                          </svg>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full" />
+                    Seçilen Havuz
+                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0) && (
+                      <>
+                        <span className="text-xs text-green-600 font-semibold">
+                          {totalUsers.toLocaleString()} kullanıcı
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCampaigns([]);
+                            setSelectedUsers([]);
+                            setCampaignUsers({});
+                            clearAllUsers();
+                          }}
+                          className="ml-auto text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Tümünü Temizle
+                        </button>
+                      </>
+                    )}
+                  </h3>
+                  <div
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    className={`bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 min-h-[280px] max-h-[400px] overflow-y-auto border-2 border-dashed transition-all ${
+                      draggedCampaign ? 'border-green-400 bg-green-100' : 'border-green-200'
+                    }`}
+                  >
+                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-green-600">
+                        <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        <p className="text-sm font-medium">Kampanyaları veya kullanıcıları ekleyin</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {useAllUsers && (
+                          <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                            <p className="text-sm font-medium text-blue-900">Tüm aktif kullanıcılar seçili</p>
+                            <p className="text-xs text-blue-700">
+                              {allUsersCount.toLocaleString('tr-TR')} kullanıcı backend tarafından gönderim anında çekilecek. Telefonsuzlar atılır.
+                            </p>
+                          </div>
+                        )}
+                        {selectedUsers.length > 0 && (
+                          <div className="mb-3">
+                            <p className="text-xs text-blue-600 font-medium mb-2">Seçilen Kullanıcılar ({selectedUsers.length})</p>
+                            {selectedUsers.map((user) => (
+                              <div
+                                key={user.email}
+                                className="bg-blue-50 p-2 rounded-lg border border-blue-200 flex items-center gap-2 mb-1 group"
+                              >
+                                <div className="w-6 h-6 rounded-full bg-[#2b2973] flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+                                  {user.fullName?.charAt(0) || user.email.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-gray-900 text-xs truncate">{user.fullName || '-'}</p>
+                                  <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                                  {user.phoneNumber && (
+                                    <p className="text-[10px] text-gray-400 truncate">{user.phoneNumber}</p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedUsers(selectedUsers.filter((u) => u.id !== user.id))}
+                                  className="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {selectedCampaigns.map((campaign) => (
+                          <div
+                            key={campaign.id}
+                            className="bg-white p-3 rounded-lg border border-green-200 flex items-center justify-between group"
+                          >
+                            <div>
+                              <p className="font-medium text-gray-900 text-sm">{campaign.name}</p>
+                              <p className="text-xs text-gray-500">{campaign.userCount.toLocaleString()} kullanıcı</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeCampaign(campaign.id)}
+                              className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mt-4">
+                <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                Kullanıcılar
+                {loadingUsers && (
+                  <span className="ml-2 text-xs text-gray-400">Yükleniyor...</span>
+                )}
+                {userTotal > 0 && (
+                  <span className="ml-2 text-xs text-gray-400">{userTotal.toLocaleString()} kullanıcı</span>
+                )}
+                {!useAllUsers ? (
+                  <button
+                    type="button"
+                    onClick={handleAddAll}
+                    className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                  >
+                    Tümünü Ekle
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={clearAllUsers}
+                    className="ml-auto text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                  >
+                    Tümünü Kaldır
+                  </button>
+                )}
+              </h3>
+
+              {useAllUsers && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 text-sm">
+                    <p className="font-medium text-blue-900">
+                      Tüm aktif kullanıcılar seçili ({allUsersCount.toLocaleString('tr-TR')} kişi)
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      Listeyi browser&apos;a indirmiyoruz. Backend göndereceğin anda DB&apos;den çeker; telefonsuzlar atılır.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Kullanıcı ara (isim veya e-posta)..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                />
+                {userSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setUserSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <div ref={userListRef} className="bg-blue-50 rounded-xl p-3 min-h-[350px] max-h-[350px] overflow-y-auto">
+                {loadingUsers ? (
+                  <div className="flex items-center justify-center py-8">
+                    <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  </div>
+                ) : filteredUsers.length === 0 && !loadingUsers ? (
+                  <div className="text-center text-gray-400 text-sm py-8">
+                    {userSearch ? 'Aramanızla eşleşen telefonlu kullanıcı bulunamadı' : 'Telefonlu kullanıcı kalmadı veya tümü seçildi'}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {filteredUsers.map((user) => (
+                      <button
+                        key={user.email}
+                        type="button"
+                        onClick={() => {
+                          if (!selectedEmails.includes(user.email.toLowerCase())) {
+                            setSelectedUsers([...selectedUsers, user]);
+                          }
+                        }}
+                        className="bg-white p-2.5 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-sm transition-all flex items-center gap-2 text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-[#2b2973] flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+                          {user.fullName?.charAt(0) || user.email.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-900 text-xs truncate">{user.fullName || '-'}</p>
+                          <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                          <p className="text-[10px] text-gray-400 truncate">{user.phoneNumber}</p>
+                        </div>
+                        <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </button>
+                    ))}
+                    <div ref={scrollSentinelRef} className="col-span-full h-4" />
+                    {loadingMoreUsers && (
+                      <div className="col-span-full flex justify-center py-3">
+                        <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    )}
+                    {!hasMoreUsers && filteredUsers.length > 0 && (
+                      <p className="col-span-full text-center text-xs text-gray-400 py-2">Tüm kullanıcılar yüklendi</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {currentStep === 3 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Şablon ve Etiket</h2>
+              <p className="text-sm text-gray-500">SMS için şablon seçin ve kampanya etiketi girin</p>
+
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Kampanya Etiketi</label>
+                  {templates.find((t) => t.id === selectedTemplate)?.name && (
+                    <span className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Şablondan geliyor
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  readOnly={!!templates.find((t) => t.id === selectedTemplate)?.name}
+                  placeholder="Kampanya etiketini yazın..."
+                  className={`w-full px-4 py-3 border rounded-xl transition-all text-gray-900 ${
+                    templates.find((t) => t.id === selectedTemplate)?.name
+                      ? 'border-purple-200 bg-purple-50 cursor-not-allowed text-purple-800 focus:outline-none'
+                      : 'border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500'
+                  }`}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                {loadingTemplates ? (
+                  <div className="col-span-full flex items-center justify-center py-12">
+                    <svg className="animate-spin h-8 w-8 text-[#2b2973]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  </div>
+                ) : templates.length === 0 ? (
+                  <div className="col-span-full text-center py-12">
+                    <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-500 mb-4">Henüz şablon oluşturulmamış</p>
+                    <a href="/panel/sms-templates" className="text-[#2b2973] font-medium hover:underline">Şablon Oluştur →</a>
+                  </div>
+                ) : (
+                  templates.map((template) => (
+                    <div key={template.id} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTemplate(template.id);
+                          setLabel(template.name || '');
+                        }}
+                        className={`w-full relative p-4 rounded-xl border-2 transition-all text-left ${
+                          selectedTemplate === template.id
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="w-full h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-3 overflow-hidden p-2">
+                          {template.textContent ? (
+                            <div
+                              className="w-full h-full text-[6px] leading-tight text-gray-700 whitespace-pre-wrap overflow-hidden pointer-events-none"
+                              style={{ transform: 'scale(0.85)', transformOrigin: 'top left' }}
+                            >
+                              {template.textContent}
+                            </div>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        <h3 className="font-semibold text-gray-900 text-sm">{template.name}</h3>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description || 'Açıklama yok'}</p>
+                        {selectedTemplate === template.id && (
+                          <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewTemplate(template.id)}
+                        className="absolute bottom-16 right-2 px-2 py-1 bg-white border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center gap-1 shadow-sm"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Önizle
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {previewTemplate && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{templates.find((t) => t.id === previewTemplate)?.name} - Önizleme</h3>
+                      <p className="text-xs text-gray-500">{templates.find((t) => t.id === previewTemplate)?.description || 'Şablon önizlemesi'}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTemplate(null)}
+                    className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                        <span className="font-medium">Gönderen:</span>
+                        <span>Posta Güvercini SMS</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                        <span className="font-medium">Alıcı:</span>
+                        <span className="text-blue-600">{totalUsers} kullanıcı</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm text-gray-600">Etiket:</span>
+                        <span className="font-semibold text-gray-900">{label || '(Etiket girilmedi)'}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-6">
+                      {(() => {
+                        const currentTemplate = templates.find((t) => t.id === previewTemplate);
+                        if (currentTemplate?.textContent) {
+                          return (
+                            <div className="max-w-sm mx-auto">
+                              <div className="bg-green-100 rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-gray-900 whitespace-pre-wrap">
+                                {personalizePreview(currentTemplate.textContent)}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-2 text-right">
+                                {personalizePreview(currentTemplate.textContent).length}/{SMS_MAX_CHARS} karakter
+                              </p>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="text-center py-8 text-gray-400">
+                            <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                            </svg>
+                            <p>Şablon içeriği bulunamadı</p>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 text-center">
+                      <p className="text-xs text-gray-500">Bu SMS PracticApp tarafından gönderilecektir.</p>
+                      <p className="text-xs text-gray-400 mt-1">Placeholder&apos;lar gönderim anında kişiselleştirilir</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
+                  <p className="text-sm text-gray-500">
+                    Bu şablon seçildikten sonra SMS&apos;iniz bu şekilde görünecek
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTemplate(null)}
+                      className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                    >
+                      Kapat
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTemplate(previewTemplate);
+                        const tpl = templates.find((t) => t.id === previewTemplate);
+                        setLabel(tpl?.name || '');
+                        setPreviewTemplate(null);
+                      }}
+                      className="px-4 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 transition-colors"
+                    >
+                      Bu Şablonu Seç
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentStep === 4 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold text-gray-900">Gönderim Servisi</h2>
+              <p className="text-sm text-gray-500">SMS gönderim servisini seçin</p>
+              
+              {providers.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-500 mb-2">Henüz SMS sağlayıcısı eklenmemiş</p>
+                  <p className="text-sm text-gray-400">Veritabanına bir SMS provider ekleyin</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                  {providers.map((provider) => {
+                    const colorMap: Record<string, string> = {
+                      postaguvercini: 'bg-green-100 text-green-600',
+                    };
+                    const iconMap: Record<string, string> = {
+                      postaguvercini: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
+                    };
+                    const defaultIcon = iconMap.postaguvercini;
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        onClick={() => setSelectedProvider(provider.id)}
+                        className={`relative p-4 rounded-xl border-2 transition-all text-left ${
+                          selectedProvider === provider.id
+                            ? 'border-[#2b2973] bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className={`w-10 h-10 ${colorMap[provider.type] || 'bg-gray-100 text-gray-600'} rounded-lg flex items-center justify-center mb-3`}>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap[provider.type] || defaultIcon} />
+                          </svg>
+                        </div>
+                        <h3 className="font-medium text-gray-900 text-sm">{provider.name}</h3>
+                        <p className="text-xs text-gray-500 mt-1">{provider.type.toUpperCase()}</p>
+                        {provider.isDefault && (
+                          <span className="absolute top-2 left-2 px-1.5 py-0.5 bg-green-100 text-green-600 text-[10px] font-medium rounded">Varsayılan</span>
+                        )}
+                        {selectedProvider === provider.id && (
+                          <div className="absolute top-3 right-3 w-5 h-5 bg-[#2b2973] rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedProvider && (
+                <div className="mt-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+                  <h3 className="font-semibold text-gray-900 mb-1">Gönderim Zamanlama</h3>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Varsayılan olarak 10.000&apos;erli batch ve 30 dakika aralık uygulanır. Özel ayar için Ekstra&apos;yı açın.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setSchedulingExtraOpen(false)}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        !schedulingExtraOpen
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${!schedulingExtraOpen ? 'text-blue-700' : 'text-gray-900'}`}>Tamamı</p>
+                      <p className="text-xs text-gray-500 mt-0.5">10.000 SMS / 30 dk aralık</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSchedulingExtraOpen(true);
+                        if (!dailyLimit) setDailyLimit(String(DEFAULT_BATCH_LIMIT));
+                        if (!intervalHours) setIntervalHours(DEFAULT_INTERVAL_HOURS);
+                      }}
+                      className={`p-3 rounded-xl border-2 text-left transition-all ${
+                        schedulingExtraOpen
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${schedulingExtraOpen ? 'text-blue-700' : 'text-gray-900'}`}>Ekstra</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Limit ve zamanlamayı özelleştir</p>
+                    </button>
+                  </div>
+
+                  {!schedulingExtraOpen ? (
+                    <div className="p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm text-gray-700">
+                          {totalUsers > DEFAULT_BATCH_LIMIT
+                            ? `${DEFAULT_BATCH_LIMIT.toLocaleString()}'erli batch · 30 dakika aralık · İlk batch hemen`
+                            : 'Tüm alıcılar tek seferde gönderilir (10.000 altı)'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Batch Başına Limit</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={dailyLimit}
+                      onChange={(e) => {
+                        setDailyLimit(e.target.value);
+                        setManualSchedules([]);
+                      }}
+                      placeholder={`örn: 500 (toplam ${totalUsers.toLocaleString()} kişi)`}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Her seferde kaç SMS gönderilsin</p>
+                  </div>
+
+                  {dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers && (
+                    <div className="space-y-4">
+                      <label className="block text-sm font-medium text-gray-700">Zamanlama Modu</label>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {[
+                          { id: 'immediate' as const, title: 'Hemen + Aralık', desc: 'İlk batch hemen, kalanlar aralıkla' },
+                          { id: 'startDate' as const, title: 'Başlangıç Tarihi', desc: 'Belirli tarihte başla, aralıkla devam' },
+                          { id: 'manual' as const, title: 'Manuel Zamanlama', desc: 'Her batch için ayrı tarih/saat' },
+                        ].map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => {
+                              setScheduleMode(mode.id);
+                              if (mode.id === 'manual') {
+                                const batchCount = Math.ceil(totalUsers / parseInt(dailyLimit));
+                                setManualSchedules(Array(batchCount).fill(''));
+                              }
+                            }}
+                            className={`p-3 rounded-xl border-2 text-left transition-all ${
+                              scheduleMode === mode.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                            }`}
+                          >
+                            <p className={`text-sm font-medium ${scheduleMode === mode.id ? 'text-blue-700' : 'text-gray-900'}`}>{mode.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{mode.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+
+                      {scheduleMode === 'immediate' && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Gönderim Aralığı (Saat)</label>
+                          <select
+                            value={intervalHours}
+                            onChange={(e) => setIntervalHours(e.target.value)}
+                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                          >
+                            <option value="0.5">30 Dakika</option>
+                            <option value="1">1 Saat</option>
+                            <option value="2">2 Saat</option>
+                            <option value="3">3 Saat</option>
+                            <option value="6">6 Saat</option>
+                            <option value="12">12 Saat</option>
+                            <option value="24">24 Saat (1 Gün)</option>
+                            <option value="48">48 Saat (2 Gün)</option>
+                          </select>
+                          <p className="text-xs text-gray-400 mt-1">İlk batch hemen gönderilir, kalanlar bu aralıkla</p>
+                        </div>
+                      )}
+
+                      {scheduleMode === 'startDate' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Başlangıç Tarihi ve Saati</label>
+                            <input
+                              type="datetime-local"
+                              value={startAt}
+                              onChange={(e) => setStartAt(e.target.value)}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">İlk batch bu tarihte gönderilir</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Batch Aralığı (Saat)</label>
+                            <select
+                              value={intervalHours}
+                              onChange={(e) => setIntervalHours(e.target.value)}
+                              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                            >
+                              <option value="0.5">30 Dakika</option>
+                              <option value="1">1 Saat</option>
+                              <option value="2">2 Saat</option>
+                              <option value="3">3 Saat</option>
+                              <option value="6">6 Saat</option>
+                              <option value="12">12 Saat</option>
+                              <option value="24">24 Saat (1 Gün)</option>
+                              <option value="48">48 Saat (2 Gün)</option>
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">Sonraki batch&apos;ler bu aralıkla gönderilir</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {scheduleMode === 'manual' && (
+                        <div className="space-y-3">
+                          <p className="text-xs text-gray-500">Her batch için gönderim tarihi ve saatini belirleyin</p>
+                          <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+                            {manualSchedules.map((dt, idx) => {
+                              const batchSize = parseInt(dailyLimit);
+                              const start = idx * batchSize;
+                              const end = Math.min(start + batchSize, totalUsers);
+                              const count = end - start;
+                              return (
+                                <div key={idx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                                  <div className="flex-shrink-0 w-20">
+                                    <span className="text-xs font-semibold text-blue-600">Batch {idx + 1}</span>
+                                    <p className="text-[10px] text-gray-400">{count.toLocaleString()} kişi</p>
+                                  </div>
+                                  <input
+                                    type="datetime-local"
+                                    value={dt}
+                                    onChange={(e) => {
+                                      const updated = [...manualSchedules];
+                                      updated[idx] = e.target.value;
+                                      setManualSchedules(updated);
+                                    }}
+                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {(() => {
+                        const batchSize = parseInt(dailyLimit);
+                        const batchCount = Math.ceil(totalUsers / batchSize);
+                        const previewBatches: Array<{ num: number; count: number; time: string }> = [];
+
+                        for (let i = 0; i < batchCount; i++) {
+                          const batchStart = i * batchSize;
+                          const batchEnd = Math.min(batchStart + batchSize, totalUsers);
+                          const count = batchEnd - batchStart;
+                          let time = '';
+
+                          if (scheduleMode === 'immediate') {
+                            if (i === 0) {
+                              time = 'Hemen';
+                            } else {
+                              const futureMs = parseFloat(intervalHours) * 60 * 60 * 1000 * i;
+                              const futureDate = new Date(Date.now() + futureMs);
+                              time = futureDate.toLocaleString('tr-TR');
+                            }
+                          } else if (scheduleMode === 'startDate' && startAt) {
+                            const baseTime = new Date(startAt).getTime();
+                            const futureMs = parseFloat(intervalHours) * 60 * 60 * 1000 * i;
+                            const futureDate = new Date(baseTime + futureMs);
+                            time = futureDate.toLocaleString('tr-TR');
+                          } else if (scheduleMode === 'manual' && manualSchedules[i]) {
+                            time = new Date(manualSchedules[i]).toLocaleString('tr-TR');
+                          } else {
+                            time = 'Tarih seçilmedi';
+                          }
+
+                          previewBatches.push({ num: i + 1, count, time });
+                        }
+
+                        return (
+                          <div className="mt-4 p-3 bg-white rounded-lg border border-blue-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-xs font-semibold text-gray-700">Gönderim Planı ({batchCount} batch)</span>
+                            </div>
+                            <div className="max-h-[180px] overflow-y-auto space-y-1">
+                              {previewBatches.map((b) => (
+                                <div key={b.num} className="flex items-center justify-between text-xs py-1.5 px-2 rounded hover:bg-blue-50">
+                                  <span className="text-gray-600">
+                                    <span className="font-medium text-gray-800">Batch {b.num}</span> &middot; {b.count.toLocaleString()} kişi
+                                  </span>
+                                  <span className={`font-medium ${b.time === 'Tarih seçilmedi' ? 'text-red-400' : 'text-blue-600'}`}>{b.time}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {selectedProvider && (
+                <div className="mt-4 p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
+                  <h3 className="font-semibold text-gray-900 mb-3">Özet</h3>
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Platform</p>
+                      <p className="font-medium text-gray-900">{selectedPlatform === 'gise' ? 'Gişe Kıbrıs' : 'Kupon Kıbrıs'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Etiket</p>
+                      <p className="font-medium text-gray-900 truncate">{label}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Hedef Kitle</p>
+                      <p className="font-medium text-gray-900">{totalUsers.toLocaleString()} kullanıcı</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Servis</p>
+                      <p className="font-medium text-gray-900">{providers.find((p) => p.id === selectedProvider)?.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Zamanlama</p>
+                      <p className="font-medium text-gray-900">
+                        {!schedulingExtraOpen
+                          ? totalUsers > DEFAULT_BATCH_LIMIT
+                            ? `${DEFAULT_BATCH_LIMIT.toLocaleString()}'erli / 30 Dakika`
+                            : 'Hemen gönderilir'
+                          : dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers
+                          ? scheduleMode === 'immediate'
+                            ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${intervalHours === '0.5' ? '30 Dakika' : `${intervalHours} saat`}`
+                            : scheduleMode === 'startDate'
+                              ? `${parseInt(dailyLimit).toLocaleString()}'erli / ${startAt ? new Date(startAt).toLocaleString('tr-TR') : '-'}`
+                              : `${parseInt(dailyLimit).toLocaleString()}'erli / Manuel`
+                          : 'Limitsiz (hemen)'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => setCurrentStep(currentStep - 1)}
+            disabled={currentStep === 1}
+            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
+              currentStep === 1
+                ? 'text-gray-300 cursor-not-allowed'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Geri
+          </button>
+
+          {currentStep < totalSteps ? (
+            <button
+              type="button"
+              onClick={() => setCurrentStep(currentStep + 1)}
+              disabled={!canProceed()}
+              className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl transition-all ${
+                canProceed()
+                  ? 'bg-gradient-to-r from-[#2b2973] to-[#4a3f9f] text-white hover:shadow-lg hover:shadow-purple-500/25'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              İleri
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!canProceed() || sending}
+              className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl transition-all ${
+                canProceed() && !sending
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/25'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {sending ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Gönderiliyor...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  Gönder
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {sendResultModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                sendResultModal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+              }`}
+            >
+              {sendResultModal.type === 'success' ? (
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 text-center mb-3">{sendResultModal.title}</h3>
+            {sendResultModal.lines && sendResultModal.lines.length > 0 && (
+              <ul className="space-y-2 mb-6">
+                {sendResultModal.lines.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
+                    <span className="text-gray-400 mt-0.5">•</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {sendResultModal.message && (
+              <p className="text-gray-500 text-center text-sm mb-6">{sendResultModal.message}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const modal = sendResultModal;
+                setSendResultModal(null);
+                if (modal.type === 'success' && modal.logId) {
+                  router.push(`/panel/sms-reports?highlight=${modal.logId}`);
+                }
+              }}
+              className={`w-full px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                sendResultModal.type === 'success'
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/25'
+                  : 'bg-red-500 text-white hover:bg-red-600'
+              }`}
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
