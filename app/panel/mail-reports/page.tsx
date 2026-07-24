@@ -37,6 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Bekliyor',
   failed: 'Başarısız',
   partial: 'Kısmi',
+  cancelled: 'İptal',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -45,6 +46,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
   failed: 'bg-red-100 text-red-700',
   partial: 'bg-orange-100 text-orange-700',
+  cancelled: 'bg-gray-100 text-gray-600',
 };
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -84,6 +86,8 @@ function MailReportsContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancellingAll, setCancellingAll] = useState(false);
   const highlightRef = useRef<HTMLTableRowElement>(null);
 
   const fetchReports = useCallback(async (pageNum: number, isRefresh = false) => {
@@ -128,6 +132,67 @@ function MailReportsContent() {
     fetchReports(page, true);
   };
 
+  const canCancelCampaign = (report: MailReport) =>
+    ['pending', 'scheduled', 'partial'].includes(report.status) ||
+    report.stats.pending > 0 ||
+    report.stats.sending > 0;
+
+  const handleCancelCampaign = async (logId: string) => {
+    if (!confirm('Bu kampanyanın bekleyen mail kuyruğunu iptal etmek istiyor musunuz?')) {
+      return;
+    }
+    setCancellingId(logId);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_URL}/mail/queue/cancel-by-log/${logId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.message || 'İptal başarısız');
+        return;
+      }
+      alert(`${data.cancelledCount ?? 0} bekleyen batch iptal edildi`);
+      fetchReports(page, true);
+    } catch (error) {
+      console.error(error);
+      alert('İptal sırasında hata oluştu');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const handleCancelAll = async () => {
+    if (
+      !confirm(
+        'TÜM bekleyen mail kuyruklarını iptal etmek istediğine emin misin? Bu işlem geri alınamaz.',
+      )
+    ) {
+      return;
+    }
+    setCancellingAll(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_URL}/mail/queue/cancel-all`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.message || 'Toplu iptal başarısız');
+        return;
+      }
+      alert(`${data.cancelledCount ?? 0} bekleyen batch iptal edildi`);
+      fetchReports(page, true);
+    } catch (error) {
+      console.error(error);
+      alert('Toplu iptal sırasında hata oluştu');
+    } finally {
+      setCancellingAll(false);
+    }
+  };
+
   const formatDate = (dateStr: string) =>
     new Date(dateStr).toLocaleString('tr-TR', {
       day: '2-digit',
@@ -147,28 +212,38 @@ function MailReportsContent() {
             Etkinlik / kampanya başına gönderim durumunu takip edin
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing || loading}
-          className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-gradient-to-r from-[#2b2973] to-[#4a3f9f] text-white hover:shadow-lg hover:shadow-purple-500/25 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {refreshing ? (
-            <>
-              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              Güncelleniyor...
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Verileri Güncelle
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCancelAll}
+            disabled={cancellingAll || loading}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-red-600 text-white hover:bg-red-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {cancellingAll ? 'Durduruluyor...' : 'Tüm Kuyruğu Durdur'}
+          </button>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl bg-gradient-to-r from-[#2b2973] to-[#4a3f9f] text-white hover:shadow-lg hover:shadow-purple-500/25 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {refreshing ? (
+              <>
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Güncelleniyor...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Verileri Güncelle
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Özet Kartlar */}
@@ -219,6 +294,7 @@ function MailReportsContent() {
                   <th className="text-right px-4 py-3 font-medium text-red-600">Başarısız</th>
                   <th className="text-right px-4 py-3 font-medium text-yellow-600">Bekleyen</th>
                   <th className="text-center px-4 py-3 font-medium text-gray-600">Durum</th>
+                  <th className="text-center px-4 py-3 font-medium text-gray-600">İşlem</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -267,6 +343,20 @@ function MailReportsContent() {
                         }`}>
                           {STATUS_LABELS[report.status] || report.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {canCancelCampaign(report) ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCancelCampaign(report.id)}
+                            disabled={cancellingId === report.id}
+                            className="px-2.5 py-1 text-xs font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-50"
+                          >
+                            {cancellingId === report.id ? '...' : 'Durdur'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
                       </td>
                     </tr>
                   );
