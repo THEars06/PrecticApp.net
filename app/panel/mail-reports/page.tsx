@@ -514,7 +514,7 @@ function CampaignDetailModal({
     }
     if (
       !confirm(
-        `${count.toLocaleString('tr-TR')} kişiye aynı şablonla tekrar gönderilsin mi?\n\nVarsayılan: 10.000'er batch · 30 dk aralık`,
+        `${count.toLocaleString('tr-TR')} kişiye tekrar gönderilsin mi?\n\nŞablon: ${detail?.log.template?.name || report.template?.name || '-'}\nŞablonda yaptığın son değişiklikler kullanılır (eski kampanya HTML'i değil).\n\nVarsayılan: 10.000'er batch · 30 dk aralık`,
       )
     ) {
       return;
@@ -647,9 +647,14 @@ function CampaignDetailModal({
             )}
           </div>
           {tab === 'unsent' && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900">
-              Başarısız, bekleyen ve iptal edilen kuyruktaki alıcılara{' '}
-              <strong>aynı şablon</strong> ile tekrar gönderilir (10.000 / 30 dk).
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-900 space-y-1">
+              <p>
+                Gönderilemeyenlere <strong>{detail?.log.template?.name || report.template?.name || 'aynı şablon'}</strong> ile
+                yeni kampanya açılır (10.000 / 30 dk).
+              </p>
+              <p className="text-amber-800">
+                Şablonda değişiklik yaptıysan <strong>güncel hali</strong> gider — eski kampanyadaki kilitli HTML kullanılmaz.
+              </p>
             </div>
           )}
         </div>
