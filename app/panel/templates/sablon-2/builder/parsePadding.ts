@@ -41,6 +41,25 @@ export function updatePaddingVertical(value: string | undefined, top: number, bo
   return formatPadding({ ...current, top, bottom });
 }
 
+export function updatePaddingHorizontal(value: string | undefined, left: number, right: number, fallback = '12px 24px'): string {
+  const current = parsePadding(value, fallback);
+  return formatPadding({ ...current, left, right });
+}
+
+/** Heading/text inside colored bars must not sit flush on the edges. */
+export function ensureReadablePadding(
+  value: string | undefined,
+  fallback = '16px 24px',
+  minHorizontal = 20,
+): string {
+  const current = parsePadding(value, fallback);
+  return formatPadding({
+    ...current,
+    left: Math.max(current.left, minHorizontal),
+    right: Math.max(current.right, minHorizontal),
+  });
+}
+
 export function parseButtonPadding(value: string | undefined): { vertical: number; horizontal: number } {
   const parts = (value || '8px 12px').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 1) {

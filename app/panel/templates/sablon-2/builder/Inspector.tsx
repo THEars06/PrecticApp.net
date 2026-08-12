@@ -5,7 +5,7 @@ import { GalleryColumns, GalleryImage, SocialLink, SocialPlatform, TemplateBlock
 import { useTemplate2Store } from './store';
 import { ensureUrlProtocol } from './validators';
 import { getBlockBackground, getBlockPadding, setBlockBackground, setBlockPadding, galleryCaptionsEnabled } from './blockStyle';
-import { formatButtonPadding, parseButtonPadding, parsePadding, updatePaddingVertical } from './parsePadding';
+import { formatButtonPadding, parseButtonPadding, parsePadding, updatePaddingVertical, updatePaddingHorizontal, ensureReadablePadding } from './parsePadding';
 import { RangeSlider } from './SpacingSlider';
 import { GISE_BRAND, BRAND_BG_PRESETS } from './brandColors';
 
@@ -256,14 +256,17 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   const paddingValue = getBlockPadding(block);
   if (!paddingValue) return null;
-  const parsed = parsePadding(paddingValue);
+  const fallback = block.type === 'heading' ? '16px 24px' : '12px 24px';
+  const needsSidePadding = block.type === 'heading' || block.type === 'text';
+  const effectivePadding = needsSidePadding ? ensureReadablePadding(paddingValue, fallback, 20) : paddingValue;
+  const parsed = parsePadding(effectivePadding, fallback);
   const blockLabel = block.type === 'heading' ? 'Başlık Boşluğu' : 'Blok Boşluğu';
 
   return (
     <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
       <div>
         <h3 className="text-xs font-bold text-gray-800">{blockLabel}</h3>
-        <p className="mt-1 text-[11px] text-gray-500">Üst ve alt boşlukları ayarla.</p>
+        <p className="mt-1 text-[11px] text-gray-500">Üst, alt ve yan boşlukları ayarla.</p>
       </div>
       <RangeSlider
         label="Üst"
@@ -274,7 +277,11 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
           updateBlock(block.id, (current) => {
             const currentPadding = getBlockPadding(current);
             if (!currentPadding) return current;
-            return setBlockPadding(current, updatePaddingVertical(currentPadding, top, parsePadding(currentPadding).bottom));
+            const next = updatePaddingVertical(currentPadding, top, parsePadding(currentPadding).bottom);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+            );
           })
         }
       />
@@ -287,7 +294,45 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
           updateBlock(block.id, (current) => {
             const currentPadding = getBlockPadding(current);
             if (!currentPadding) return current;
-            return setBlockPadding(current, updatePaddingVertical(currentPadding, parsePadding(currentPadding).top, bottom));
+            const next = updatePaddingVertical(currentPadding, parsePadding(currentPadding).top, bottom);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+            );
+          })
+        }
+      />
+      <RangeSlider
+        label="Sol"
+        value={parsed.left}
+        min={needsSidePadding ? 20 : 0}
+        max={80}
+        onChange={(left) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            const next = updatePaddingHorizontal(currentPadding, left, parsePadding(currentPadding).right);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+            );
+          })
+        }
+      />
+      <RangeSlider
+        label="Sağ"
+        value={parsed.right}
+        min={needsSidePadding ? 20 : 0}
+        max={80}
+        onChange={(right) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            const next = updatePaddingHorizontal(currentPadding, parsePadding(currentPadding).left, right);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+            );
           })
         }
       />

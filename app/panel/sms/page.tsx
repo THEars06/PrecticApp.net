@@ -502,7 +502,7 @@ export default function SmsPage() {
 
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
         {/* Progress Steps — tıklanamaz, sadece Geri/İleri ile geçilir */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4">
           {[
             {
               step: 1,
@@ -615,28 +615,154 @@ export default function SmsPage() {
 
           {currentStep === 2 && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
+              <div>
                   <h2 className="text-lg font-semibold text-gray-900">Hedef Kitle Seçimi</h2>
                   <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={addAllCampaigns}
-                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  Tümünü Ekle
-                </button>
-              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+                {/* Sol: Kullanıcılar */}
+                <div className="space-y-3 min-w-0">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
+                    <span className="w-2 h-2 bg-blue-500 rounded-full" />
+                    Kullanıcılar
+                    {loadingUsers && (
+                      <span className="text-xs text-gray-400">Yükleniyor...</span>
+                    )}
+                    {userTotal > 0 && (
+                      <span className="text-xs text-gray-400">{userTotal.toLocaleString()}</span>
+                    )}
+                    {!useAllUsers ? (
+                      <button
+                        type="button"
+                        onClick={handleAddAll}
+                        className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                      >
+                        Tümünü Ekle
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={clearAllUsers}
+                        className="ml-auto text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                      >
+                        Tümünü Kaldır
+                      </button>
+                    )}
+                  </h3>
+
+                  {useAllUsers && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 text-sm min-w-0">
+                        <p className="font-medium text-blue-900">
+                          Tüm aktif kullanıcılar seçili ({allUsersCount.toLocaleString('tr-TR')} kişi)
+                        </p>
+                        <p className="text-xs text-blue-700">
+                          Backend göndereceğin anda DB&apos;den çeker; telefonsuzlar atılır.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="İsim, e-posta veya telefon..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
+                    />
+                    {userSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setUserSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  <div ref={userListRef} className="bg-blue-50 rounded-xl p-3 min-h-[260px] max-h-[260px] overflow-y-auto">
+                    {loadingUsers ? (
+                      <div className="flex items-center justify-center py-8">
+                        <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    ) : filteredUsers.length === 0 && !loadingUsers ? (
+                      <div className="text-center text-gray-400 text-sm py-8">
+                        {userSearch ? 'Aramanızla eşleşen telefonlu kullanıcı bulunamadı' : 'Telefonlu kullanıcı kalmadı veya tümü seçildi'}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {filteredUsers.map((user) => (
+                          <button
+                            key={user.email}
+                            type="button"
+                            onClick={() => {
+                              if (!selectedEmails.includes(user.email.toLowerCase())) {
+                                setSelectedUsers([...selectedUsers, user]);
+                              }
+                            }}
+                            className="bg-white p-2.5 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-sm transition-all flex items-center gap-2 text-left w-full"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-[#2b2973] flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
+                              {user.fullName?.charAt(0) || user.email.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-gray-900 text-xs truncate">{user.fullName || '-'}</p>
+                              <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                              <p className="text-[10px] text-gray-400 truncate">{user.phoneNumber}</p>
+                            </div>
+                            <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                          </button>
+                        ))}
+                        <div ref={scrollSentinelRef} className="h-4" />
+                        {loadingMoreUsers && (
+                          <div className="flex justify-center py-3">
+                            <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                          </div>
+                        )}
+                        {!hasMoreUsers && filteredUsers.length > 0 && (
+                          <p className="text-center text-xs text-gray-400 py-2">Tüm kullanıcılar yüklendi</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Orta: Mevcut Kampanyalar */}
+                <div className="space-y-3 min-w-0">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 bg-gray-400 rounded-full" />
                     Mevcut Kampanyalar ({availableCampaigns.length})
                     {loadingCampaigns && (
-                      <span className="ml-2 text-xs text-gray-400">Yükleniyor...</span>
+                      <span className="text-xs text-gray-400">Yükleniyor...</span>
                     )}
+                    <button
+                      type="button"
+                      onClick={addAllCampaigns}
+                      className="ml-auto text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+                    >
+                      Tümünü Ekle
+                    </button>
                   </h3>
 
                   <div className="relative">
@@ -663,7 +789,7 @@ export default function SmsPage() {
                     )}
                   </div>
 
-                  <div className="bg-gray-50 rounded-xl p-4 min-h-[200px] max-h-[300px] overflow-y-auto space-y-2">
+                  <div className="bg-gray-50 rounded-xl p-4 min-h-[260px] max-h-[260px] overflow-y-auto space-y-2">
                     {loadingCampaigns ? (
                       <div className="h-full flex items-center justify-center py-8">
                         <svg className="animate-spin h-6 w-6 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -672,7 +798,7 @@ export default function SmsPage() {
                         </svg>
                       </div>
                     ) : filteredCampaigns.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                      <div className="h-full flex items-center justify-center text-gray-400 text-sm text-center px-2">
                         {campaignSearch ? 'Aramanızla eşleşen kampanya bulunamadı' : availableCampaigns.length === 0 ? 'Kampanya bulunamadı' : 'Tüm kampanyalar seçildi'}
                       </div>
                     ) : (
@@ -683,11 +809,11 @@ export default function SmsPage() {
                           onDragStart={() => handleDragStart(campaign)}
                           className="bg-white p-3 rounded-lg border border-gray-200 cursor-grab active:cursor-grabbing hover:border-purple-300 hover:shadow-sm transition-all flex items-center justify-between"
                         >
-                          <div>
-                            <p className="font-medium text-gray-900 text-sm">{campaign.name}</p>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 text-sm truncate">{campaign.name}</p>
                             <p className="text-xs text-gray-500">{campaign.userCount.toLocaleString()} kullanıcı</p>
                           </div>
-                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                           </svg>
                         </div>
@@ -696,8 +822,9 @@ export default function SmsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                {/* Sağ: Seçilen Havuz */}
+                <div className="space-y-3 min-w-0">
+                  <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 bg-green-500 rounded-full" />
                     Seçilen Havuz
                     {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0) && (
@@ -718,7 +845,7 @@ export default function SmsPage() {
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                          Tümünü Temizle
+                          Temizle
                         </button>
                       </>
                     )}
@@ -726,16 +853,16 @@ export default function SmsPage() {
                   <div
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
-                    className={`bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 min-h-[280px] max-h-[400px] overflow-y-auto border-2 border-dashed transition-all ${
+                    className={`bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 min-h-[260px] max-h-[260px] overflow-y-auto border-2 border-dashed transition-all ${
                       draggedCampaign ? 'border-green-400 bg-green-100' : 'border-green-200'
                     }`}
                   >
                     {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-green-600">
+                      <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-green-600">
                         <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
-                        <p className="text-sm font-medium">Kampanyaları veya kullanıcıları ekleyin</p>
+                        <p className="text-sm font-medium text-center">Kampanyaları veya kullanıcıları ekleyin</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -783,14 +910,14 @@ export default function SmsPage() {
                             key={campaign.id}
                             className="bg-white p-3 rounded-lg border border-green-200 flex items-center justify-between group"
                           >
-                            <div>
-                              <p className="font-medium text-gray-900 text-sm">{campaign.name}</p>
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 text-sm truncate">{campaign.name}</p>
                               <p className="text-xs text-gray-500">{campaign.userCount.toLocaleString()} kullanıcı</p>
                             </div>
                             <button
                               type="button"
                               onClick={() => removeCampaign(campaign.id)}
-                              className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200"
+                              className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -802,130 +929,6 @@ export default function SmsPage() {
                     )}
                   </div>
                 </div>
-              </div>
-
-              <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mt-4">
-                <span className="w-2 h-2 bg-blue-500 rounded-full" />
-                Kullanıcılar
-                {loadingUsers && (
-                  <span className="ml-2 text-xs text-gray-400">Yükleniyor...</span>
-                )}
-                {userTotal > 0 && (
-                  <span className="ml-2 text-xs text-gray-400">{userTotal.toLocaleString()} kullanıcı</span>
-                )}
-                {!useAllUsers ? (
-                  <button
-                    type="button"
-                    onClick={handleAddAll}
-                    className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
-                  >
-                    Tümünü Ekle
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={clearAllUsers}
-                    className="ml-auto text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
-                  >
-                    Tümünü Kaldır
-                  </button>
-                )}
-              </h3>
-
-              {useAllUsers && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 text-sm">
-                    <p className="font-medium text-blue-900">
-                      Tüm aktif kullanıcılar seçili ({allUsersCount.toLocaleString('tr-TR')} kişi)
-                    </p>
-                    <p className="text-xs text-blue-700">
-                      Listeyi browser&apos;a indirmiyoruz. Backend göndereceğin anda DB&apos;den çeker; telefonsuzlar atılır.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Kullanıcı ara (isim veya e-posta)..."
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
-                />
-                {userSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setUserSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-
-              <div ref={userListRef} className="bg-blue-50 rounded-xl p-3 min-h-[350px] max-h-[350px] overflow-y-auto">
-                {loadingUsers ? (
-                  <div className="flex items-center justify-center py-8">
-                    <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                  </div>
-                ) : filteredUsers.length === 0 && !loadingUsers ? (
-                  <div className="text-center text-gray-400 text-sm py-8">
-                    {userSearch ? 'Aramanızla eşleşen telefonlu kullanıcı bulunamadı' : 'Telefonlu kullanıcı kalmadı veya tümü seçildi'}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {filteredUsers.map((user) => (
-                      <button
-                        key={user.email}
-                        type="button"
-                        onClick={() => {
-                          if (!selectedEmails.includes(user.email.toLowerCase())) {
-                            setSelectedUsers([...selectedUsers, user]);
-                          }
-                        }}
-                        className="bg-white p-2.5 rounded-lg border border-blue-200 hover:border-blue-400 hover:shadow-sm transition-all flex items-center gap-2 text-left"
-                      >
-                        <div className="w-8 h-8 rounded-full bg-[#2b2973] flex items-center justify-center text-white text-xs font-medium flex-shrink-0">
-                          {user.fullName?.charAt(0) || user.email.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-medium text-gray-900 text-xs truncate">{user.fullName || '-'}</p>
-                          <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
-                          <p className="text-[10px] text-gray-400 truncate">{user.phoneNumber}</p>
-                        </div>
-                        <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      </button>
-                    ))}
-                    <div ref={scrollSentinelRef} className="col-span-full h-4" />
-                    {loadingMoreUsers && (
-                      <div className="col-span-full flex justify-center py-3">
-                        <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                      </div>
-                    )}
-                    {!hasMoreUsers && filteredUsers.length > 0 && (
-                      <p className="col-span-full text-center text-xs text-gray-400 py-2">Tüm kullanıcılar yüklendi</p>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1493,7 +1496,7 @@ export default function SmsPage() {
           )}
         </div>
 
-        <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
+        <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
           <button
             type="button"
             onClick={() => setCurrentStep(currentStep - 1)}

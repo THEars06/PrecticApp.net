@@ -1,4 +1,5 @@
 import { TemplateBlock } from './types';
+import { ensureReadablePadding } from './parsePadding';
 
 const DEFAULT_BLOCK_PADDING: Partial<Record<TemplateBlock['type'], string>> = {
   heading: '16px 24px',
@@ -83,6 +84,16 @@ export function getBlockPadding(block: TemplateBlock): string | undefined {
   const value = 'padding' in block.style ? (block.style.padding as string | undefined) : undefined;
   if (value?.trim()) return value;
   return defaultBlockPadding(block);
+}
+
+/** Heading/text: never allow text flush to colored bar edges. */
+export function getReadableBlockPadding(block: TemplateBlock): string | undefined {
+  const padding = getBlockPadding(block);
+  if (!padding) return undefined;
+  if (block.type === 'heading' || block.type === 'text') {
+    return ensureReadablePadding(padding, defaultBlockPadding(block) || '16px 24px', 20);
+  }
+  return padding;
 }
 
 export function setBlockPadding(block: TemplateBlock, padding: string): TemplateBlock {

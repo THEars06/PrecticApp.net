@@ -2,7 +2,7 @@
 
 import { HeadingBlock as HeadingBlockType } from '../types';
 import { useTemplate2Store } from '../store';
-import { getBlockPadding } from '../blockStyle';
+import { getReadableBlockPadding } from '../blockStyle';
 import BlockFrame from './BlockFrame';
 
 export default function HeadingBlock({ block }: { block: HeadingBlockType }) {
@@ -10,7 +10,7 @@ export default function HeadingBlock({ block }: { block: HeadingBlockType }) {
 
   return (
     <BlockFrame id={block.id} label="Başlık" backgroundColor={block.style.blockBg}>
-      <div style={{ padding: getBlockPadding(block) ?? '16px 24px' }}>
+      <div style={{ padding: getReadableBlockPadding(block) ?? '16px 24px' }}>
         <div
           contentEditable
           suppressContentEditableWarning
