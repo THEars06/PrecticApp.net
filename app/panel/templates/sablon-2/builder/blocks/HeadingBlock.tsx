@@ -10,7 +10,7 @@ export default function HeadingBlock({ block }: { block: HeadingBlockType }) {
 
   return (
     <BlockFrame id={block.id} label="Başlık" backgroundColor={block.style.blockBg}>
-      <div style={{ padding: getReadableBlockPadding(block) ?? '16px 24px' }}>
+      <div style={{ padding: getReadableBlockPadding(block) ?? '14px 10px' }}>
         <div
           contentEditable
           suppressContentEditableWarning

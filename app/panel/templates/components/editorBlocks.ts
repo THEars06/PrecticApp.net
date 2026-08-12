@@ -10,19 +10,19 @@ export const editorBlocks = [
     id: 'text',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><div class="gjs-block-label">Metin</div>',
     category: 'Temel',
-    content: '<p style="padding:10px;font-size:16px;line-height:1.6;width:100%;">Metin içeriği buraya yazın...</p>',
+    content: '<p style="padding:10px;font-size:16px;line-height:1.6;width:100%;border-radius:1px;">Metin içeriği buraya yazın...</p>',
   },
   {
     id: 'heading',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><text x="3" y="18" font-size="17" font-weight="bold" fill="currentColor">H1</text></svg><div class="gjs-block-label">Başlık</div>',
     category: 'Temel',
-    content: '<h1 style="padding:10px;font-size:32px;font-weight:700;line-height:1.2;width:100%;">Başlık</h1>',
+    content: '<h1 style="padding:10px;font-size:32px;font-weight:700;line-height:1.2;width:100%;border-radius:1px;">Başlık</h1>',
   },
   {
     id: 'subheading',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><text x="3" y="18" font-size="14" font-weight="bold" fill="currentColor">H2</text></svg><div class="gjs-block-label">Alt Başlık</div>',
     category: 'Temel',
-    content: '<h2 style="padding:10px;font-size:22px;font-weight:600;width:100%;">Alt Başlık</h2>',
+    content: '<h2 style="padding:10px;font-size:22px;font-weight:600;width:100%;border-radius:1px;">Alt Başlık</h2>',
   },
   {
     id: 'image',

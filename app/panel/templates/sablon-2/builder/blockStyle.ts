@@ -2,8 +2,8 @@ import { TemplateBlock } from './types';
 import { ensureReadablePadding } from './parsePadding';
 
 const DEFAULT_BLOCK_PADDING: Partial<Record<TemplateBlock['type'], string>> = {
-  heading: '16px 24px',
-  text: '12px 24px',
+  heading: '14px 10px',
+  text: '12px 10px',
   image: '12px 24px',
   gallery: '12px 12px',
   hero: '40px 28px',
@@ -91,7 +91,7 @@ export function getReadableBlockPadding(block: TemplateBlock): string | undefine
   const padding = getBlockPadding(block);
   if (!padding) return undefined;
   if (block.type === 'heading' || block.type === 'text') {
-    return ensureReadablePadding(padding, defaultBlockPadding(block) || '16px 24px', 20);
+    return ensureReadablePadding(padding, defaultBlockPadding(block) || '14px 10px', 10);
   }
   return padding;
 }

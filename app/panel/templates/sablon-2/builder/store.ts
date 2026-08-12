@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { createBlock, createDesignFromPreset, defaultSettings } from './presets';
+import { ensureReadablePadding } from './parsePadding';
 import { BlockType, DeviceMode, PresetId, TemplateBlock, TemplateDesign, TemplateMeta, TemplateSettings } from './types';
 
 const emptyMeta: TemplateMeta = {
@@ -10,6 +11,53 @@ const emptyMeta: TemplateMeta = {
 };
 
 const initialDesign = createDesignFromPreset('blank');
+
+function normalizeBlock(block: TemplateBlock): TemplateBlock {
+  if (block.type === 'heading' || block.type === 'text') {
+    const fallback = block.type === 'heading' ? '14px 10px' : '12px 10px';
+    return {
+      ...block,
+      style: {
+        ...block.style,
+        padding: ensureReadablePadding(block.style.padding, fallback, 10),
+      },
+    };
+  }
+  if (block.type === 'gallery') {
+    return {
+      ...block,
+      content: {
+        ...block.content,
+        images: block.content.images.map((image) => {
+          const { width: _ignored, ...rest } = image;
+          return rest;
+        }),
+      },
+      style: {
+        ...block.style,
+        // Force equal cards — old templates often had imageWidth < 100%
+        imageWidth: '100%',
+      },
+    };
+  }
+  if (block.type === 'columns') {
+    return {
+      ...block,
+      content: {
+        left: block.content.left.map(normalizeBlock),
+        right: block.content.right.map(normalizeBlock),
+      },
+    };
+  }
+  return block;
+}
+
+function normalizeDesign(design: TemplateDesign): TemplateDesign {
+  return {
+    ...design,
+    blocks: design.blocks.map(normalizeBlock),
+  };
+}
 
 function cloneBlock(block: TemplateBlock): TemplateBlock {
   const cloned = structuredClone(block) as TemplateBlock;
@@ -100,7 +148,7 @@ export const useTemplate2Store = create<BuilderState>((set, get) => {
 
     loadDesign: (design, meta) => {
       set({
-        design,
+        design: normalizeDesign(design),
         meta: { ...emptyMeta, ...meta },
         selectedId: null,
         past: [],

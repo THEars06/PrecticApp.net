@@ -133,8 +133,8 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
             const buttonText = image.buttonText ?? GALLERY_DEFAULT_BUTTON;
             const imageLink = image.link?.trim();
             const showBtn = imageShowsButton(block, image.showButton);
-            const imageWidth =
-              device === 'mobile' ? '100%' : image.width?.trim() || block.style.imageWidth || '100%';
+            // Sütun genişliğinin tamamı — hepsi eşit
+            const imageWidth = '100%';
 
             const imageNode = image.src ? (
               <img
@@ -142,8 +142,7 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
                 alt={image.alt}
                 style={{
                   width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
+                  height: 'auto',
                   display: 'block',
                   borderRadius: block.style.borderRadius,
                 }}
@@ -153,21 +152,18 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
             return (
               <div
                 key={image.id}
-                className="flex h-full min-h-0 flex-col"
+                className="flex h-full min-h-0 w-full flex-col"
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={(event) => onDrop(event, image.id)}
               >
-                <div className="shrink-0" style={{ textAlign: block.style.align }}>
+                <div className="w-full shrink-0">
                   {image.src ? (
                     <div
                       style={{
-                        aspectRatio,
                         width: imageWidth,
                         maxWidth: '100%',
                         overflow: 'hidden',
                         borderRadius: block.style.borderRadius,
-                        marginLeft: block.style.align === 'left' ? 0 : 'auto',
-                        marginRight: block.style.align === 'right' ? 0 : 'auto',
                         display: 'block',
                       }}
                     >
@@ -175,7 +171,7 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
                         <a
                           href={imageLink}
                           onClick={(event) => event.preventDefault()}
-                          style={{ display: 'block', textDecoration: 'none', height: '100%' }}
+                          style={{ display: 'block', textDecoration: 'none' }}
                         >
                           {imageNode}
                         </a>
@@ -187,8 +183,8 @@ export default function GalleryBlock({ block }: { block: GalleryBlockType }) {
                     <button
                       type="button"
                       onClick={() => inputRefs.current[image.id]?.click()}
-                      className="min-h-32 rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm text-gray-500 hover:border-[#ae256c] hover:bg-purple-50"
-                      style={{ aspectRatio, width: imageWidth, maxWidth: '100%' }}
+                      className="min-h-32 w-full rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-sm text-gray-500 hover:border-[#ae256c] hover:bg-purple-50"
+                      style={{ aspectRatio }}
                     >
                       {uploadingId === image.id ? 'Yükleniyor...' : `Görsel ${index + 1}`}
                     </button>

@@ -39,7 +39,7 @@ export function createBlock(type: BlockType): TemplateBlock {
         id,
         type,
         content: { text: 'Başlık yazın', level: 1 },
-        style: { color: GISE_BRAND.secondary, align: 'center', fontSize: '24px', padding: '16px 24px' },
+        style: { color: GISE_BRAND.secondary, align: 'center', fontSize: '24px', padding: '14px 10px' },
       };
     case 'text':
       return {

@@ -46,17 +46,17 @@ export function updatePaddingHorizontal(value: string | undefined, left: number,
   return formatPadding({ ...current, left, right });
 }
 
-/** Heading/text inside colored bars must not sit flush on the edges. */
+/** Heading/text side padding — exact value (not Math.max, or old 24px never becomes 10px). */
 export function ensureReadablePadding(
   value: string | undefined,
-  fallback = '16px 24px',
-  minHorizontal = 20,
+  fallback = '14px 10px',
+  sidePadding = 10,
 ): string {
   const current = parsePadding(value, fallback);
   return formatPadding({
     ...current,
-    left: Math.max(current.left, minHorizontal),
-    right: Math.max(current.right, minHorizontal),
+    left: sidePadding,
+    right: sidePadding,
   });
 }
 

@@ -256,9 +256,9 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   const paddingValue = getBlockPadding(block);
   if (!paddingValue) return null;
-  const fallback = block.type === 'heading' ? '16px 24px' : '12px 24px';
+  const fallback = block.type === 'heading' ? '14px 10px' : '12px 10px';
   const needsSidePadding = block.type === 'heading' || block.type === 'text';
-  const effectivePadding = needsSidePadding ? ensureReadablePadding(paddingValue, fallback, 20) : paddingValue;
+  const effectivePadding = needsSidePadding ? ensureReadablePadding(paddingValue, fallback, 10) : paddingValue;
   const parsed = parsePadding(effectivePadding, fallback);
   const blockLabel = block.type === 'heading' ? 'Başlık Boşluğu' : 'Blok Boşluğu';
 
@@ -280,7 +280,7 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
             const next = updatePaddingVertical(currentPadding, top, parsePadding(currentPadding).bottom);
             return setBlockPadding(
               current,
-              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
             );
           })
         }
@@ -297,7 +297,7 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
             const next = updatePaddingVertical(currentPadding, parsePadding(currentPadding).top, bottom);
             return setBlockPadding(
               current,
-              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
             );
           })
         }
@@ -305,7 +305,7 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
       <RangeSlider
         label="Sol"
         value={parsed.left}
-        min={needsSidePadding ? 20 : 0}
+        min={needsSidePadding ? 10 : 0}
         max={80}
         onChange={(left) =>
           updateBlock(block.id, (current) => {
@@ -314,7 +314,7 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
             const next = updatePaddingHorizontal(currentPadding, left, parsePadding(currentPadding).right);
             return setBlockPadding(
               current,
-              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
             );
           })
         }
@@ -322,7 +322,7 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
       <RangeSlider
         label="Sağ"
         value={parsed.right}
-        min={needsSidePadding ? 20 : 0}
+        min={needsSidePadding ? 10 : 0}
         max={80}
         onChange={(right) =>
           updateBlock(block.id, (current) => {
@@ -331,7 +331,7 @@ function BlockSpacingControls({ block }: { block: TemplateBlock }) {
             const next = updatePaddingHorizontal(currentPadding, parsePadding(currentPadding).left, right);
             return setBlockPadding(
               current,
-              needsSidePadding ? ensureReadablePadding(next, fallback, 20) : next,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
             );
           })
         }
@@ -1509,32 +1509,6 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
               className={inputClass}
               placeholder="Görsel URL: https://..."
             />
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-semibold text-gray-500">Bu görselin boyutu</span>
-              <input
-                type="range"
-                min={20}
-                max={100}
-                value={Number.parseInt(image.width || block.style.imageWidth, 10) || 100}
-                onChange={(event) =>
-                  updateBlock(block.id, (current) =>
-                    current.type === 'gallery'
-                      ? {
-                          ...current,
-                          content: {
-                            ...current.content,
-                            images: current.content.images.map((item) =>
-                              item.id === image.id ? { ...item, width: `${event.target.value}%` } : item,
-                            ),
-                          },
-                        }
-                      : current,
-                  )
-                }
-                className="w-full"
-              />
-              <span className="text-[11px] text-gray-400">{image.width || block.style.imageWidth}</span>
-            </label>
             <input
               value={image.link || ''}
               onChange={(event) =>
