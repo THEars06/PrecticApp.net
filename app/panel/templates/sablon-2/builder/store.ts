@@ -13,13 +13,21 @@ const emptyMeta: TemplateMeta = {
 const initialDesign = createDesignFromPreset('blank');
 
 function normalizeBlock(block: TemplateBlock): TemplateBlock {
-  if (block.type === 'heading' || block.type === 'text') {
-    const fallback = block.type === 'heading' ? '14px 10px' : '12px 10px';
+  if (block.type === 'heading') {
     return {
       ...block,
       style: {
         ...block.style,
-        padding: ensureReadablePadding(block.style.padding, fallback, 10),
+        padding: ensureReadablePadding(block.style.padding, '14px 10px', 10),
+      },
+    };
+  }
+  if (block.type === 'text') {
+    return {
+      ...block,
+      style: {
+        ...block.style,
+        padding: ensureReadablePadding(block.style.padding, '12px 10px', 10),
       },
     };
   }
@@ -35,7 +43,6 @@ function normalizeBlock(block: TemplateBlock): TemplateBlock {
       },
       style: {
         ...block.style,
-        // Force equal cards — old templates often had imageWidth < 100%
         imageWidth: '100%',
       },
     };
