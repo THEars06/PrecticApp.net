@@ -4,7 +4,7 @@ const DEFAULT_BLOCK_PADDING: Partial<Record<TemplateBlock['type'], string>> = {
   heading: '16px 24px',
   text: '12px 24px',
   image: '12px 24px',
-  gallery: '12px 24px',
+  gallery: '12px 12px',
   hero: '40px 28px',
   coupon: '22px 24px',
   footer: '28px 24px',

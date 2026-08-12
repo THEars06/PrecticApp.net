@@ -70,7 +70,11 @@ export default function ImageBlock({ block }: { block: ImageBlockType }) {
                       : current,
                   )
                 }
-                style={{ color: block.style.captionColor, fontSize: block.style.captionFontSize }}
+                style={{
+                  color: block.style.captionColor,
+                  fontSize: block.style.captionFontSize,
+                  fontWeight: Number(block.style.captionFontWeight) || 400,
+                }}
               >
                 {block.content.caption}
               </div>

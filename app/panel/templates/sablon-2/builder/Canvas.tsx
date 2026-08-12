@@ -74,7 +74,7 @@ export default function Canvas() {
         }}
       >
         <div
-          className="mx-auto min-h-[900px] overflow-hidden rounded-2xl shadow-xl"
+          className="mx-auto min-h-[900px] rounded-2xl shadow-xl"
           style={{
             backgroundColor: design.settings.contentBgColor,
             fontFamily: design.settings.fontFamily,
@@ -82,7 +82,7 @@ export default function Canvas() {
         >
           {design.blocks.length ? (
             <SortableContext items={design.blocks.map((block) => block.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-1 p-2 pb-28">{design.blocks.map((block) => <div key={block.id}>{renderBlock(block)}</div>)}</div>
+              <div className="space-y-1 p-4 pb-28">{design.blocks.map((block) => <div key={block.id}>{renderBlock(block)}</div>)}</div>
             </SortableContext>
           ) : (
             <div className="flex min-h-[900px] items-center justify-center p-10 text-center">

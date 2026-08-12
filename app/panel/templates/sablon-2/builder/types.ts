@@ -46,6 +46,7 @@ export type ImageBlock = BaseBlock & {
     padding: string;
     captionColor: string;
     captionFontSize: string;
+    captionFontWeight?: string;
     blockBg?: string;
   };
 };
@@ -80,6 +81,7 @@ export type GalleryBlock = BaseBlock & {
     padding: string;
     captionColor: string;
     captionFontSize: string;
+    captionFontWeight?: string;
     buttonBg: string;
     buttonColor: string;
     buttonRadius: string;
@@ -96,7 +98,24 @@ export type GalleryBlock = BaseBlock & {
 export type HeroBlock = BaseBlock & {
   type: 'hero';
   content: { image?: string; title: string; subtitle?: string; buttonText?: string; buttonUrl?: string };
-  style: { bgColor: string; textColor: string; buttonBg?: string; buttonColor?: string; buttonFontSize?: string; buttonPadding?: string; buttonMarginTop?: string; buttonMarginBottom?: string; align: TextAlign; padding: string; borderRadius: string; imageWidth?: string };
+  style: {
+    bgColor: string;
+    textColor: string;
+    titleFontSize?: string;
+    subtitleFontSize?: string;
+    titleFontWeight?: string;
+    subtitleFontWeight?: string;
+    buttonBg?: string;
+    buttonColor?: string;
+    buttonFontSize?: string;
+    buttonPadding?: string;
+    buttonMarginTop?: string;
+    buttonMarginBottom?: string;
+    align: TextAlign;
+    padding: string;
+    borderRadius: string;
+    imageWidth?: string;
+  };
 };
 
 export type ButtonBlock = BaseBlock & {

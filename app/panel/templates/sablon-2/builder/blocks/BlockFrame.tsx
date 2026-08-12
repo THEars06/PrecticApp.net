@@ -30,7 +30,7 @@ export default function BlockFrame({ id, label, children, backgroundColor }: Pro
       }}
       className={`group relative rounded-xl border-2 transition-all ${
         selected ? 'border-emerald-500 shadow-lg shadow-emerald-100' : 'border-transparent hover:border-purple-200'
-      } ${isDragging ? 'opacity-60' : ''} ${backgroundColor ? '' : 'bg-white'}`}
+      } ${isDragging ? 'opacity-60' : ''} ${backgroundColor ? 'overflow-hidden' : 'bg-white'}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,

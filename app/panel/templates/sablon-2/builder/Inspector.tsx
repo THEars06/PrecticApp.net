@@ -98,8 +98,14 @@ function ButtonColorFields({
 }
 
 function parsePxValue(value: string | undefined, fallback: number): number {
-  const match = (value || '').trim().match(/^(\d+(?:\.\d+)?)/);
+  const match = (value || '').trim().match(/^(-?\d+(?:\.\d+)?)/);
   return match ? Number(match[1]) : fallback;
+}
+
+function halfOfFontSize(fontSize: string, fallback = 13): string {
+  const px = Number.parseInt(fontSize, 10);
+  const base = Number.isFinite(px) ? px : fallback;
+  return `${Math.max(6, Math.round(base / 2))}px`;
 }
 
 function ButtonSizeControls({
@@ -111,10 +117,12 @@ function ButtonSizeControls({
   defaultPadding = '14px 24px',
   defaultMarginTop = 16,
   defaultMarginBottom = 0,
-  fontMin = 10,
+  fontMin = 6,
   fontMax = 32,
   verticalMax = 32,
   horizontalMax = 48,
+  marginMin = -40,
+  marginMax = 80,
   onFontSizeChange,
   onPaddingChange,
   onMarginTopChange,
@@ -132,6 +140,8 @@ function ButtonSizeControls({
   fontMax?: number;
   verticalMax?: number;
   horizontalMax?: number;
+  marginMin?: number;
+  marginMax?: number;
   onFontSizeChange: (value: string) => void;
   onPaddingChange: (value: string) => void;
   onMarginTopChange?: (value: string) => void;
@@ -146,27 +156,30 @@ function ButtonSizeControls({
     <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
       <div>
         <h3 className="text-xs font-bold text-gray-800">Buton Boyutu</h3>
-        <p className="mt-1 text-[11px] text-gray-500">Yazı boyutu, iç boşluk ve yazılardan aralığı ayarla.</p>
+        <p className="mt-1 text-[11px] text-gray-500">Yazı boyutu, iç boşluk ve yazılardan aralığı ayarla. Mesafe eksi değere inebilir.</p>
       </div>
       <RangeSlider
         label="Yazı boyutu"
         value={fontPx}
         min={fontMin}
         max={fontMax}
+        step={1}
         onChange={(value) => onFontSizeChange(`${value}px`)}
       />
       <RangeSlider
         label="İç üst / alt"
         value={btnPad.vertical}
-        min={4}
+        min={2}
         max={verticalMax}
+        step={1}
         onChange={(vertical) => onPaddingChange(formatButtonPadding(vertical, btnPad.horizontal))}
       />
       <RangeSlider
         label="İç sağ / sol"
         value={btnPad.horizontal}
-        min={8}
+        min={4}
         max={horizontalMax}
+        step={1}
         onChange={(horizontal) => onPaddingChange(formatButtonPadding(btnPad.vertical, horizontal))}
       />
       {onMarginTopChange ? (
@@ -174,16 +187,18 @@ function ButtonSizeControls({
           <RangeSlider
             label="Üstten mesafe"
             value={marginTopPx}
-            min={0}
-            max={80}
+            min={marginMin}
+            max={marginMax}
+            step={1}
             onChange={(value) => onMarginTopChange(`${value}px`)}
           />
           {onMarginBottomChange ? (
             <RangeSlider
               label="Alttan mesafe"
               value={marginBottomPx}
-              min={0}
-              max={80}
+              min={marginMin}
+              max={marginMax}
+              step={1}
               onChange={(value) => onMarginBottomChange(`${value}px`)}
             />
           ) : null}
@@ -524,6 +539,65 @@ export default function Inspector() {
                 className="h-10 w-full"
               />
             </Field>
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+              <h3 className="text-xs font-bold text-gray-800">Hero Yazıları</h3>
+              <RangeSlider
+                label="Başlık boyutu"
+                value={Number.parseInt(block.style.titleFontSize || '32px', 10) || 32}
+                min={14}
+                max={64}
+                step={1}
+                onChange={(value) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, style: { ...current.style, titleFontSize: `${value}px` } } : current,
+                  )
+                }
+              />
+              <Field label="Başlık kalınlığı">
+                <select
+                  value={block.style.titleFontWeight || '800'}
+                  onChange={(event) =>
+                    updateBlock(block.id, (current) =>
+                      current.type === 'hero' ? { ...current, style: { ...current.style, titleFontWeight: event.target.value } } : current,
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="400">Normal</option>
+                  <option value="600">Semi Bold</option>
+                  <option value="700">Bold</option>
+                  <option value="800">Extra Bold</option>
+                </select>
+              </Field>
+              <RangeSlider
+                label="Alt yazı boyutu"
+                value={Number.parseInt(block.style.subtitleFontSize || '16px', 10) || 16}
+                min={10}
+                max={36}
+                step={1}
+                onChange={(value) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, style: { ...current.style, subtitleFontSize: `${value}px` } } : current,
+                  )
+                }
+              />
+              <Field label="Alt yazı kalınlığı">
+                <select
+                  value={block.style.subtitleFontWeight || '400'}
+                  onChange={(event) =>
+                    updateBlock(block.id, (current) =>
+                      current.type === 'hero' ? { ...current, style: { ...current.style, subtitleFontWeight: event.target.value } } : current,
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="400">Normal</option>
+                  <option value="600">Semi Bold</option>
+                  <option value="700">Bold</option>
+                  <option value="800">Extra Bold</option>
+                </select>
+              </Field>
+            </div>
             <ButtonColorFields
               bg={block.style.buttonBg ?? GISE_BRAND.primary}
               color={block.style.buttonColor ?? GISE_BRAND.white}
@@ -1059,6 +1133,27 @@ export default function Inspector() {
   );
 }
 
+function FontWeightSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field label={label}>
+      <select value={value || '400'} onChange={(event) => onChange(event.target.value)} className={inputClass}>
+        <option value="400">Normal</option>
+        <option value="600">Semi Bold</option>
+        <option value="700">Bold</option>
+        <option value="800">Extra Bold</option>
+      </select>
+    </Field>
+  );
+}
+
 function AlignControl({ block }: { block: Extract<TemplateBlock, { style: { align: string } }> }) {
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   return (
@@ -1165,17 +1260,29 @@ function ImageStyleControls({ block }: { block: Extract<TemplateBlock, { type: '
           className="h-10 w-full"
         />
       </Field>
-      <Field label="Alt yazı boyutu">
-        <input
-          value={block.style.captionFontSize}
-          onChange={(event) =>
+      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+        <RangeSlider
+          label="Alt yazı boyutu"
+          value={Number.parseInt(block.style.captionFontSize || '13px', 10) || 13}
+          min={8}
+          max={32}
+          step={1}
+          onChange={(value) =>
             updateBlock(block.id, (current) =>
-              current.type === 'image' ? { ...current, style: { ...current.style, captionFontSize: event.target.value } } : current,
+              current.type === 'image' ? { ...current, style: { ...current.style, captionFontSize: `${value}px` } } : current,
             )
           }
-          className={inputClass}
         />
-      </Field>
+        <FontWeightSelect
+          label="Alt yazı kalınlığı"
+          value={block.style.captionFontWeight || '400'}
+          onChange={(value) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'image' ? { ...current, style: { ...current.style, captionFontWeight: value } } : current,
+            )
+          }
+        />
+      </div>
     </>
   );
 }
@@ -1211,6 +1318,31 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
           <option value={4}>4'lü Görsel</option>
           <option value={5}>5'li Görsel</option>
         </select>
+      </Field>
+      <Field label="Toplu görsel boyutu">
+        <input
+          type="range"
+          min={30}
+          max={100}
+          value={Number.parseInt(block.style.imageWidth, 10) || 100}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery'
+                ? {
+                    ...current,
+                    style: { ...current.style, imageWidth: `${event.target.value}%` },
+                    content: {
+                      ...current.content,
+                      // Toplu boyut değişince tekil override'ları temizle — slider görünsün
+                      images: current.content.images.map((item) => ({ ...item, width: undefined })),
+                    },
+                  }
+                : current,
+            )
+          }
+          className="w-full"
+        />
+        <span className="mt-1 block text-xs text-gray-500">{block.style.imageWidth}</span>
       </Field>
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
         <div className="text-xs font-bold text-gray-600">Görsel Altı Butonlar</div>
@@ -1295,6 +1427,18 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
           )
         }
       />
+      <Field label="Buton köşe yuvarlaklığı">
+        <input
+          value={block.style.buttonRadius ?? '8px'}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, buttonRadius: event.target.value } } : current,
+            )
+          }
+          className={inputClass}
+          placeholder="8px"
+        />
+      </Field>
       <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
         <div className="text-xs font-bold text-gray-600">Görsel URL, Link ve Butonlar</div>
         {block.content.images.slice(0, block.style.columns).map((image, index) => (
@@ -1403,7 +1547,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                 )
               }
               className={inputClass}
-              placeholder="Buton yazısı"
+              placeholder="Buton yazısı (örn: Satın Al)"
             />
             <input
               value={image.buttonUrl ?? ''}
@@ -1416,7 +1560,7 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                           ...current.content,
                           images: current.content.images.map((item) =>
                             item.id === image.id
-                              ? { ...item, buttonUrl: ensureUrlProtocol(event.target.value), showButton: true }
+                              ? { ...item, buttonUrl: event.target.value, showButton: true }
                               : item,
                           ),
                         },
@@ -1424,8 +1568,27 @@ function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gal
                     : current,
                 )
               }
+              onBlur={(event) => {
+                const raw = event.target.value.trim();
+                if (!raw) return;
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id
+                              ? { ...item, buttonUrl: ensureUrlProtocol(raw), showButton: true }
+                              : item,
+                          ),
+                        },
+                      }
+                    : current,
+                );
+              }}
               className={inputClass}
-              placeholder="Buton linki (boşsa görsel linki kullanılır): https://..."
+              placeholder="Buton linki: https://..."
             />
             <label className="flex items-center gap-2 text-xs text-gray-600">
               <input
@@ -1462,21 +1625,6 @@ function GalleryStyleControls({ block }: { block: Extract<TemplateBlock, { type:
   const updateBlock = useTemplate2Store((state) => state.updateBlock);
   return (
     <>
-      <Field label="Toplu görsel boyutu">
-        <input
-          type="range"
-          min={30}
-          max={100}
-          value={Number.parseInt(block.style.imageWidth, 10) || 100}
-          onChange={(event) =>
-            updateBlock(block.id, (current) =>
-              current.type === 'gallery' ? { ...current, style: { ...current.style, imageWidth: `${event.target.value}%` } } : current,
-            )
-          }
-          className="w-full"
-        />
-        <span className="mt-1 block text-xs text-gray-500">{block.style.imageWidth}</span>
-      </Field>
       <Field label="Görseller arası boşluk">
         <input
           value={block.style.gap}
@@ -1511,17 +1659,33 @@ function GalleryStyleControls({ block }: { block: Extract<TemplateBlock, { type:
           className="h-10 w-full"
         />
       </Field>
-      <Field label="Alt yazı boyutu">
-        <input
-          value={block.style.captionFontSize}
-          onChange={(event) =>
+      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+        <p className="text-[11px] text-gray-500">Alt yazı boyutu buton yazısından bağımsızdır.</p>
+        <RangeSlider
+          label="Alt yazı boyutu"
+          value={Number.parseInt(block.style.captionFontSize || '13px', 10) || 13}
+          min={8}
+          max={32}
+          step={1}
+          onChange={(value) => {
+            const captionFontSize = `${value}px`;
             updateBlock(block.id, (current) =>
-              current.type === 'gallery' ? { ...current, style: { ...current.style, captionFontSize: event.target.value } } : current,
+              current.type === 'gallery'
+                ? { ...current, style: { ...current.style, captionFontSize } }
+                : current,
+            );
+          }}
+        />
+        <FontWeightSelect
+          label="Alt yazı kalınlığı"
+          value={block.style.captionFontWeight || '400'}
+          onChange={(value) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, captionFontWeight: value } } : current,
             )
           }
-          className={inputClass}
         />
-      </Field>
+      </div>
       <AlignControl block={block} />
     </>
   );

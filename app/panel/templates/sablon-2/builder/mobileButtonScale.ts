@@ -18,7 +18,7 @@ export function scalePadding(value: string, factor = PADDING_SCALE): string {
 }
 
 export function mobileButtonFont(fontSize: string, device: DeviceMode): string {
-  return device === 'mobile' ? scalePx(fontSize, FONT_SCALE, 10) : fontSize;
+  return device === 'mobile' ? scalePx(fontSize, FONT_SCALE, 6) : fontSize;
 }
 
 export function mobileButtonPadding(padding: string, device: DeviceMode): string {

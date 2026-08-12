@@ -94,7 +94,11 @@ export default function HeroBlock({ block }: { block: HeroBlockType }) {
                   : current,
               )
             }
-            className="text-3xl font-extrabold leading-tight outline-none"
+            className="leading-tight outline-none"
+            style={{
+              fontSize: block.style.titleFontSize ?? '32px',
+              fontWeight: Number(block.style.titleFontWeight) || 800,
+            }}
           >
             {block.content.title}
           </div>
@@ -108,7 +112,11 @@ export default function HeroBlock({ block }: { block: HeroBlockType }) {
                   : current,
               )
             }
-            className="mt-3 text-base leading-7 opacity-80 outline-none"
+            className="mt-3 leading-7 opacity-80 outline-none"
+            style={{
+              fontSize: block.style.subtitleFontSize ?? '16px',
+              fontWeight: Number(block.style.subtitleFontWeight) || 400,
+            }}
           >
             {block.content.subtitle || 'Alt açıklama'}
           </div>

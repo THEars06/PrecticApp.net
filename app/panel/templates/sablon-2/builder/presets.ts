@@ -66,6 +66,7 @@ export function createBlock(type: BlockType): TemplateBlock {
           padding: '12px 24px',
           captionColor: GISE_BRAND.textMuted,
           captionFontSize: '13px',
+          captionFontWeight: '400',
         },
       };
     case 'gallery':
@@ -83,9 +84,10 @@ export function createBlock(type: BlockType): TemplateBlock {
           imageWidth: '100%',
           align: 'center',
           borderRadius: '12px',
-          padding: '12px 24px',
+          padding: '12px 12px',
           captionColor: GISE_BRAND.textMuted,
           captionFontSize: '13px',
+          captionFontWeight: '400',
           buttonBg: GISE_BRAND.primary,
           buttonColor: GISE_BRAND.white,
           buttonRadius: '8px',
@@ -110,6 +112,10 @@ export function createBlock(type: BlockType): TemplateBlock {
         style: {
           bgColor: GISE_BRAND.primaryLight,
           textColor: GISE_BRAND.secondary,
+          titleFontSize: '32px',
+          subtitleFontSize: '16px',
+          titleFontWeight: '800',
+          subtitleFontWeight: '400',
           buttonBg: GISE_BRAND.primary,
           buttonColor: GISE_BRAND.white,
           buttonFontSize: '15px',
