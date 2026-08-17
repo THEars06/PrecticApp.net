@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import ExcelImportButton from '../components/ExcelImportButton';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
 const GISE_KUPON_API_URL = process.env.NEXT_PUBLIC_GISE_KUPON_API_URL || 'http://localhost:3001';
@@ -100,6 +101,8 @@ export default function SmsPage() {
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [campaignSearch, setCampaignSearch] = useState('');
   const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
+  const [excelPhones, setExcelPhones] = useState<string[]>([]);
+  const [excelFileName, setExcelFileName] = useState('');
 
   const fetchUsers = useCallback(async (search: string, page: number, append: boolean) => {
     if (page === 1) setLoadingUsers(true);
@@ -257,6 +260,8 @@ export default function SmsPage() {
         setSelectedUsers([]);
         setSelectedCampaigns([]);
         setCampaignUsers({});
+        setExcelPhones([]);
+        setExcelFileName('');
       }
     } catch (error) {
       console.error(error);
@@ -293,7 +298,7 @@ export default function SmsPage() {
 
   const totalUsers = useAllUsers
     ? allUsersCount
-    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
+    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length + excelPhones.length;
 
   const totalSteps = 4;
 
@@ -341,6 +346,7 @@ export default function SmsPage() {
         return (
           selectedCampaigns.length > 0 ||
           selectedUsers.length > 0 ||
+          excelPhones.length > 0 ||
           (useAllUsers && allUsersCount > 0)
         );
       case 3:
@@ -371,13 +377,16 @@ export default function SmsPage() {
       } else {
         const uuidRe =
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        body.recipients = selectedUsers.flatMap((u) => {
-          if (uuidRe.test(u.id)) return [u.id];
-          if (u.phoneNumber && String(u.phoneNumber).trim()) {
-            return [String(u.phoneNumber).trim()];
-          }
-          return [];
-        });
+        body.recipients = [
+          ...selectedUsers.flatMap((u) => {
+            if (uuidRe.test(u.id)) return [u.id];
+            if (u.phoneNumber && String(u.phoneNumber).trim()) {
+              return [String(u.phoneNumber).trim()];
+            }
+            return [];
+          }),
+          ...excelPhones,
+        ];
       }
 
       const effectiveRecipientCount = useAllUsers
@@ -450,6 +459,8 @@ export default function SmsPage() {
         setSelectedUsers([]);
         setUseAllUsers(false);
         setAllUsersCount(0);
+        setExcelPhones([]);
+        setExcelFileName('');
         setLabel('');
         setSelectedTemplate(null);
         setSchedulingExtraOpen(false);
@@ -615,10 +626,31 @@ export default function SmsPage() {
 
           {currentStep === 2 && (
             <div className="space-y-4">
-              <div>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
                   <h2 className="text-lg font-semibold text-gray-900">Hedef Kitle Seçimi</h2>
-                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın</p>
+                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın veya Excel&apos;den telefon numarası aktarın</p>
                 </div>
+                <ExcelImportButton
+                  kind="phone"
+                  onImported={(values, _result, fileName) => {
+                    setUseAllUsers(false);
+                    setAllUsersCount(0);
+                    setExcelFileName(fileName);
+                    setExcelPhones((prev) => {
+                      const seen = new Set(prev.map((p) => p.replace(/\D/g, '')));
+                      const merged = [...prev];
+                      for (const phone of values) {
+                        const key = phone.replace(/\D/g, '');
+                        if (!key || seen.has(key)) continue;
+                        seen.add(key);
+                        merged.push(phone);
+                      }
+                      return merged;
+                    });
+                  }}
+                />
+              </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
                 {/* Sol: Kullanıcılar */}
@@ -827,7 +859,7 @@ export default function SmsPage() {
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 bg-green-500 rounded-full" />
                     Seçilen Havuz
-                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0) && (
+                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0 || excelPhones.length > 0) && (
                       <>
                         <span className="text-xs text-green-600 font-semibold">
                           {totalUsers.toLocaleString()} kullanıcı
@@ -838,6 +870,8 @@ export default function SmsPage() {
                             setSelectedCampaigns([]);
                             setSelectedUsers([]);
                             setCampaignUsers({});
+                            setExcelPhones([]);
+                            setExcelFileName('');
                             clearAllUsers();
                           }}
                           className="ml-auto text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
@@ -857,12 +891,12 @@ export default function SmsPage() {
                       draggedCampaign ? 'border-green-400 bg-green-100' : 'border-green-200'
                     }`}
                   >
-                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 ? (
+                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 && excelPhones.length === 0 ? (
                       <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-green-600">
                         <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
-                        <p className="text-sm font-medium text-center">Kampanyaları veya kullanıcıları ekleyin</p>
+                        <p className="text-sm font-medium text-center">Kampanya, kullanıcı veya Excel ekleyin</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -872,6 +906,30 @@ export default function SmsPage() {
                             <p className="text-xs text-blue-700">
                               {allUsersCount.toLocaleString('tr-TR')} kullanıcı backend tarafından gönderim anında çekilecek. Telefonsuzlar atılır.
                             </p>
+                          </div>
+                        )}
+                        {excelPhones.length > 0 && (
+                          <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 flex items-center justify-between group">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-emerald-900 truncate">
+                                Excel: {excelFileName || 'Aktarılan numaralar'}
+                              </p>
+                              <p className="text-xs text-emerald-700">
+                                {excelPhones.length.toLocaleString('tr-TR')} telefon numarası doğrudan gönderilecek
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExcelPhones([]);
+                                setExcelFileName('');
+                              }}
+                              className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           </div>
                         )}
                         {selectedUsers.length > 0 && (

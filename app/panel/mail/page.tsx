@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import ExcelImportButton from '../components/ExcelImportButton';
 
 // Mock kampanya verileri (sadece gise için - kupon gerçek API'den gelecek)
 const mockCampaigns = {
@@ -90,6 +91,8 @@ export default function MailPage() {
   const [campaignSearch, setCampaignSearch] = useState('');
   // Kampanyadan gelen kullanıcılar
   const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
+  const [excelEmails, setExcelEmails] = useState<string[]>([]);
+  const [excelFileName, setExcelFileName] = useState('');
   // Gunluk limit ve aralik
   const [schedulingExtraOpen, setSchedulingExtraOpen] = useState(false);
   const [dailyLimit, setDailyLimit] = useState<string>('');
@@ -187,6 +190,8 @@ export default function MailPage() {
         setSelectedUsers([]);
         setSelectedCampaigns([]);
         setCampaignUsers({});
+        setExcelEmails([]);
+        setExcelFileName('');
       }
     } catch (error) {
       console.error('Tum kullanici sayimi alinamadi:', error);
@@ -321,7 +326,7 @@ export default function MailPage() {
   // useAllUsers aktif ise backend tum kullanicilari ceker — sayim olarak goster
   const totalUsers = useAllUsers
     ? allUsersCount
-    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length;
+    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length + excelEmails.length;
 
   const handleDragStart = (campaign: Campaign) => {
     setDraggedCampaign(campaign);
@@ -363,7 +368,7 @@ export default function MailPage() {
   const canProceed = () => {
     switch (currentStep) {
       case 1: return selectedPlatform !== null;
-      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0 || (useAllUsers && allUsersCount > 0);
+      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0 || excelEmails.length > 0 || (useAllUsers && allUsersCount > 0);
       case 3: return selectedTemplate !== null && subject.trim() !== '';
       case 4: return selectedProvider !== null;
       default: return false;
@@ -392,7 +397,7 @@ export default function MailPage() {
           body.audienceFilters.platform = selectedPlatform;
         }
       } else {
-        body.recipients = selectedUsers.map((u) => u.email);
+        body.recipients = [...selectedUsers.map((u) => u.email), ...excelEmails];
       }
 
       const effectiveRecipientCount = useAllUsers
@@ -465,6 +470,8 @@ export default function MailPage() {
         setSelectedUsers([]);
         setUseAllUsers(false);
         setAllUsersCount(0);
+        setExcelEmails([]);
+        setExcelFileName('');
         setSubject('');
         setSelectedTemplate(null);
         setSchedulingExtraOpen(false);
@@ -618,10 +625,31 @@ export default function MailPage() {
           {/* Step 2: Campaign/User Selection */}
           {currentStep === 2 && (
             <div className="space-y-4">
-              <div>
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
                   <h2 className="text-lg font-semibold text-gray-900">Hedef Kitle Seçimi</h2>
-                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın</p>
+                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın veya Excel&apos;den e-posta aktarın</p>
                 </div>
+                <ExcelImportButton
+                  kind="email"
+                  onImported={(values, _result, fileName) => {
+                    setUseAllUsers(false);
+                    setAllUsersCount(0);
+                    setExcelFileName(fileName);
+                    setExcelEmails((prev) => {
+                      const seen = new Set(prev.map((e) => e.toLowerCase()));
+                      const merged = [...prev];
+                      for (const email of values) {
+                        const key = email.toLowerCase();
+                        if (!key || seen.has(key)) continue;
+                        seen.add(key);
+                        merged.push(email);
+                      }
+                      return merged;
+                    });
+                  }}
+                />
+              </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
                 {/* Sol: Kullanıcılar */}
@@ -823,7 +851,7 @@ export default function MailPage() {
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
                     <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                     Seçilen Havuz
-                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0) && (
+                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0 || excelEmails.length > 0) && (
                       <>
                         <span className="text-xs text-green-600 font-semibold">
                           {totalUsers.toLocaleString()} kullanıcı
@@ -835,6 +863,8 @@ export default function MailPage() {
                             setCampaignUsers({});
                             setUseAllUsers(false);
                             setAllUsersCount(0);
+                            setExcelEmails([]);
+                            setExcelFileName('');
                           }}
                           className="ml-auto text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
                         >
@@ -853,12 +883,12 @@ export default function MailPage() {
                       draggedCampaign ? 'border-green-400 bg-green-100' : 'border-green-200'
                     }`}
                   >
-                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 ? (
+                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 && excelEmails.length === 0 ? (
                       <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-green-600">
                         <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
-                        <p className="text-sm font-medium text-center">Kampanyaları veya kullanıcıları ekleyin</p>
+                        <p className="text-sm font-medium text-center">Kampanya, kullanıcı veya Excel ekleyin</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -870,6 +900,30 @@ export default function MailPage() {
                             <p className="text-xs text-blue-700">
                               {allUsersCount.toLocaleString('tr-TR')} kullanıcı backend tarafından gönderim anında çekilecek.
                             </p>
+                          </div>
+                        )}
+                        {excelEmails.length > 0 && (
+                          <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 flex items-center justify-between group">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-emerald-900 truncate">
+                                Excel: {excelFileName || 'Aktarılan e-postalar'}
+                              </p>
+                              <p className="text-xs text-emerald-700">
+                                {excelEmails.length.toLocaleString('tr-TR')} e-posta doğrudan gönderilecek
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExcelEmails([]);
+                                setExcelFileName('');
+                              }}
+                              className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           </div>
                         )}
                         {selectedUsers.length > 0 && (
