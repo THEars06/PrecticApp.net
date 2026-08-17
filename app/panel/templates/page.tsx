@@ -11,18 +11,27 @@ type Template = {
   description: string | null;
   htmlContent: string;
   cssContent: string | null;
+  designJson?: { source?: string } | null;
   thumbnail: string | null;
   isActive: boolean;
   createdAt: string;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+const isTemplate2 = (template: Template) => template.designJson?.source === 'template2';
+const editHref = (template: Template) =>
+  isTemplate2(template) ? `/panel/templates/sablon-2/${template.id}` : `/panel/templates/${template.id}`;
 
 export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState<string | null>(null);
+
+  // İsim düzenleme state'leri
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [renaming, setRenaming] = useState(false);
   
   // Kod ile oluştur modal state'leri
   const [codeModal, setCodeModal] = useState(false);
@@ -129,6 +138,56 @@ export default function TemplatesPage() {
     setShowPreview(false);
   };
 
+  // İsim düzenlemeyi başlat
+  const startRename = (template: Template) => {
+    setEditingId(template.id);
+    setEditingName(template.name);
+  };
+
+  const cancelRename = () => {
+    setEditingId(null);
+    setEditingName('');
+  };
+
+  // İsmi kaydet
+  const handleRename = async (id: string) => {
+    const newName = editingName.trim();
+    if (!newName) {
+      alert('Şablon adı boş olamaz!');
+      return;
+    }
+    const current = templates.find(t => t.id === id);
+    if (current && current.name === newName) {
+      cancelRename();
+      return;
+    }
+
+    setRenaming(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/templates/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newName }),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setTemplates(prev => prev.map(t => (t.id === id ? { ...t, name: updated.name ?? newName } : t)));
+        cancelRename();
+      } else {
+        alert('Şablon adı güncellenemedi!');
+      }
+    } catch (error) {
+      console.error('Şablon adı güncellenirken hata:', error);
+      alert('Bir hata oluştu!');
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   const handleClone = async (id: string) => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -156,6 +215,15 @@ export default function TemplatesPage() {
           <p className="text-sm text-gray-500 mt-1">Mail şablonlarınızı oluşturun ve yönetin</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/panel/templates/sablon-2/new"
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-all"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5h16M4 12h16M4 19h10" />
+            </svg>
+            Şablon 2 Oluştur
+          </Link>
           <button
             onClick={() => setCodeModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border-2 border-[#2b2973] text-[#2b2973] text-sm font-medium rounded-xl hover:bg-[#2b2973]/5 transition-all"
@@ -194,15 +262,20 @@ export default function TemplatesPage() {
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Henüz şablon yok</h3>
           <p className="text-gray-500 mb-6">İlk mail şablonunuzu oluşturmak için başlayın</p>
-          <Link
-            href="/panel/templates/new"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#2b2973] text-white text-sm font-medium rounded-lg hover:bg-[#1e1e5c] transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Şablon Oluştur
-          </Link>
+          <div className="flex justify-center gap-3">
+            <Link
+              href="/panel/templates/sablon-2/new"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+            >
+              Şablon 2 Oluştur
+            </Link>
+            <Link
+              href="/panel/templates/new"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#2b2973] text-white text-sm font-medium rounded-lg hover:bg-[#1e1e5c] transition-colors"
+            >
+              Eski Editör
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -234,7 +307,7 @@ export default function TemplatesPage() {
                 {/* Hover overlay */}
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                   <Link
-                    href={`/panel/templates/${template.id}`}
+                    href={editHref(template)}
                     className="px-3 py-1.5 bg-white text-gray-900 text-sm font-medium rounded-lg hover:bg-gray-100 transition-colors"
                   >
                     Düzenle
@@ -256,14 +329,59 @@ export default function TemplatesPage() {
               
               {/* Content */}
               <div className="p-4">
-                <h3 className="font-semibold text-gray-900 truncate">{template.name}</h3>
+                <div className="flex items-center gap-2">
+                  {editingId === template.id ? (
+                    <input
+                      type="text"
+                      value={editingName}
+                      autoFocus
+                      disabled={renaming}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename(template.id);
+                        if (e.key === 'Escape') cancelRename();
+                      }}
+                      onBlur={() => handleRename(template.id)}
+                      className="flex-1 min-w-0 px-2 py-1 border border-[#2b2973] rounded-lg text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2b2973]/20"
+                    />
+                  ) : (
+                    <h3 className="font-semibold text-gray-900 truncate flex-1 min-w-0">{template.name}</h3>
+                  )}
+                  {isTemplate2(template) ? (
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      Şablon 2
+                    </span>
+                  ) : null}
+                  {editingId === template.id ? (
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); handleRename(template.id); }}
+                      disabled={renaming}
+                      title="Kaydet"
+                      className="shrink-0 text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => startRename(template)}
+                      title="İsmi düzenle"
+                      className="shrink-0 text-gray-400 hover:text-[#2b2973] transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 <p className="text-sm text-gray-500 mt-1 line-clamp-2">{template.description || 'Açıklama yok'}</p>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
                   <span className="text-xs text-gray-400">
                     {new Date(template.createdAt).toLocaleDateString('tr-TR')}
                   </span>
                   <Link
-                    href={`/panel/templates/${template.id}`}
+                    href={editHref(template)}
                     className="text-xs text-[#2b2973] font-medium hover:underline"
                   >
                     Düzenle →
@@ -352,7 +470,7 @@ export default function TemplatesPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Mail Konusu
+                        Mail Başlığı
                       </label>
                       <input
                         type="text"
@@ -364,13 +482,13 @@ export default function TemplatesPage() {
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        Açıklama
+                        Mail Şablonu Açıklaması
                       </label>
                       <input
                         type="text"
                         value={codeDescription}
                         onChange={(e) => setCodeDescription(e.target.value)}
-                        placeholder="Kısa bir açıklama..."
+                        placeholder="Mail şablonunun açıklaması..."
                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2b2973]/20 focus:border-[#2b2973] text-black"
                       />
                     </div>

@@ -3,9 +3,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import ExcelImportButton from '../components/ExcelImportButton';
 
-// Mock kampanya verileri (sadece gise için - kupon gerçek API'den gelecek)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
+const GISE_KUPON_API_URL = process.env.NEXT_PUBLIC_GISE_KUPON_API_URL || 'http://localhost:3001';
+const SMS_MAX_CHARS = 480;
+const DEFAULT_BATCH_LIMIT = 10000;
+const DEFAULT_INTERVAL_HOURS = '0.5';
+
 const mockCampaigns = {
   gise: [
     { id: '1', name: 'Yılbaşı Konseri 2024', userCount: 1250 },
@@ -17,31 +23,26 @@ const mockCampaigns = {
   ],
 };
 
-const DEFAULT_BATCH_LIMIT = 10000;
-const DEFAULT_INTERVAL_HOURS = '0.5';
+
+type SmsTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  textContent: string;
+  isActive: boolean;
+};
+
+type SmsProvider = { id: string; name: string; type: string; isDefault: boolean };
 
 type User = {
   id: string;
   email: string;
   fullName: string | null;
-  role?: { id: string; name: string } | null;
-};
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005';
-const GISE_KUPON_API_URL = process.env.NEXT_PUBLIC_GISE_KUPON_API_URL || 'http://localhost:3001';
-
-type MailTemplate = {
-  id: string;
-  name: string;
-  subject: string | null;
-  description: string | null;
-  htmlContent: string;
-  cssContent: string | null;
+  phoneNumber?: string | null;
 };
 
 type Platform = 'gise' | 'kupon' | null;
 type Campaign = { id: string; name: string; userCount: number };
-type MailProviderType = { id: string; name: string; type: string; isDefault: boolean };
 
 type SendResultModal = {
   type: 'success' | 'error';
@@ -51,17 +52,24 @@ type SendResultModal = {
   logId?: string;
 };
 
-export default function MailPage() {
+function personalizePreview(text: string) {
+  return text
+    .replace(/\{\{\s*fullName\s*\}\}/gi, 'Ahmet Yılmaz')
+    .replace(/\{\{\s*firstName\s*\}\}/gi, 'Ahmet')
+    .replace(/\{\{\s*email\s*\}\}/gi, 'ahmet@mail.com')
+    .replace(/\{\{\s*phoneNumber\s*\}\}/gi, '905551234567');
+}
+
+export default function SmsPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>(null);
-  const [subject, setSubject] = useState('');
-  const [content, setContent] = useState('');
-  const [selectedCampaigns, setSelectedCampaigns] = useState<Campaign[]>([]);
+  const [label, setLabel] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [selectedCampaigns, setSelectedCampaigns] = useState<Campaign[]>([]);
   const [draggedCampaign, setDraggedCampaign] = useState<Campaign | null>(null);
-  // Kullanıcı listesi — infinite scroll
+
   const [userList, setUserList] = useState<User[]>([]);
   const [userPage, setUserPage] = useState(1);
   const [userTotal, setUserTotal] = useState(0);
@@ -70,38 +78,32 @@ export default function MailPage() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingMoreUsers, setLoadingMoreUsers] = useState(false);
   const [userSearch, setUserSearch] = useState('');
-  // "Tum aktif kullanicilar" modu — backend'e selectAll=true yollanir
-  // Frontend 66K user indirmez, sadece toplam sayiyi alir.
   const [useAllUsers, setUseAllUsers] = useState(false);
   const [allUsersCount, setAllUsersCount] = useState(0);
-  // Scroll ref
   const userListRef = useRef<HTMLDivElement>(null);
   const scrollSentinelRef = useRef<HTMLDivElement>(null);
-  const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
-  // Template verileri
-  const [templates, setTemplates] = useState<MailTemplate[]>([]);
+
+  const [templates, setTemplates] = useState<SmsTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
-  // Mail gönderimi
+  const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
+  const [providers, setProviders] = useState<SmsProvider[]>([]);
   const [sending, setSending] = useState(false);
   const [sendResultModal, setSendResultModal] = useState<SendResultModal | null>(null);
-  const [mailProviders, setMailProviders] = useState<MailProviderType[]>([]);
-  // Kampanya verileri (kupon için gerçek API'den)
+
+  const [schedulingExtraOpen, setSchedulingExtraOpen] = useState(false);
+  const [dailyLimit, setDailyLimit] = useState('');
+  const [intervalHours, setIntervalHours] = useState(DEFAULT_INTERVAL_HOURS);
+  const [scheduleMode, setScheduleMode] = useState<'immediate' | 'startDate' | 'manual'>('immediate');
+  const [startAt, setStartAt] = useState('');
+  const [manualSchedules, setManualSchedules] = useState<string[]>([]);
+
   const [kuponCampaigns, setKuponCampaigns] = useState<Campaign[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
   const [campaignSearch, setCampaignSearch] = useState('');
-  // Kampanyadan gelen kullanıcılar
   const [campaignUsers, setCampaignUsers] = useState<Record<string, User[]>>({});
-  const [excelEmails, setExcelEmails] = useState<string[]>([]);
+  const [excelPhones, setExcelPhones] = useState<string[]>([]);
   const [excelFileName, setExcelFileName] = useState('');
-  // Gunluk limit ve aralik
-  const [schedulingExtraOpen, setSchedulingExtraOpen] = useState(false);
-  const [dailyLimit, setDailyLimit] = useState<string>('');
-  const [intervalHours, setIntervalHours] = useState<string>(DEFAULT_INTERVAL_HOURS);
-  const [scheduleMode, setScheduleMode] = useState<'immediate' | 'startDate' | 'manual'>('immediate');
-  const [startAt, setStartAt] = useState<string>('');
-  const [manualSchedules, setManualSchedules] = useState<string[]>([]);
 
-  // Kullanıcıları çek (arama veya sayfa bazlı)
   const fetchUsers = useCallback(async (search: string, page: number, append: boolean) => {
     if (page === 1) setLoadingUsers(true);
     else setLoadingMoreUsers(true);
@@ -109,17 +111,17 @@ export default function MailPage() {
       const token = localStorage.getItem('accessToken');
       const params = new URLSearchParams({ search, limit: '50', page: String(page) });
       const response = await fetch(`${API_URL}/users?${params}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (response.ok) {
         const data = await response.json();
         const incoming: User[] = data.data ?? [];
         const total: number = data.total ?? 0;
         setUserTotal(total);
-        setUserList(prev => {
+        setUserList((prev) => {
           if (!append) return incoming;
-          const seen = new Set(prev.map(u => u.email.toLowerCase()));
-          return [...prev, ...incoming.filter(u => !seen.has(u.email.toLowerCase()))];
+          const seen = new Set(prev.map((u) => u.email.toLowerCase()));
+          return [...prev, ...incoming.filter((u) => !seen.has(u.email.toLowerCase()))];
         });
         setHasMoreUsers(page * 50 < total);
       }
@@ -131,12 +133,10 @@ export default function MailPage() {
     }
   }, []);
 
-  // İlk yükleme
   useEffect(() => {
     fetchUsers('', 1, false);
   }, [fetchUsers]);
 
-  // Arama debounce — arama değişince sıfırla
   useEffect(() => {
     const timer = setTimeout(() => {
       setUserPage(1);
@@ -145,9 +145,6 @@ export default function MailPage() {
     return () => clearTimeout(timer);
   }, [userSearch, fetchUsers]);
 
-  // Infinite scroll — observer'i bir kere kur, callback'i ref ile guncel tut.
-  // ESKI KODDA: dep'ler degistikce observer yeniden yaratiliyor, sentinel hala
-  // gorunur oldugu icin aninda atesleniyordu → loop davranisi.
   const loadMoreRef = useRef<(() => void) | null>(null);
   loadMoreRef.current = () => {
     if (!hasMoreUsers || loadingMoreUsers || loadingUsers) return;
@@ -162,9 +159,7 @@ export default function MailPage() {
     if (!sentinel) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          loadMoreRef.current?.();
-        }
+        if (entries[0].isIntersecting) loadMoreRef.current?.();
       },
       { root: container, threshold: 0.1 },
     );
@@ -172,9 +167,85 @@ export default function MailPage() {
     return () => observer.disconnect();
   }, []);
 
-  // Tum kullanicilari sec — ARTIK browser'a indirmiyoruz!
-  // Sadece toplam sayiyi alip "selectAll" flag'ini set ediyoruz.
-  // Backend mail/send'de DB'den ceker.
+  useEffect(() => {
+    const load = async () => {
+      setLoadingTemplates(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const [tRes, pRes] = await Promise.all([
+          fetch(`${API_URL}/sms/templates`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_URL}/sms/providers`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+        if (tRes.ok) setTemplates(await tRes.json());
+        if (pRes.ok) {
+          const data = await pRes.json();
+          setProviders(data);
+          const def = data.find((p: SmsProvider) => p.isDefault);
+          if (def) setSelectedProvider(def.id);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (selectedPlatform === 'kupon') {
+      const fetchKuponCampaigns = async () => {
+        setLoadingCampaigns(true);
+        try {
+          const response = await fetch(`${GISE_KUPON_API_URL}/campaigns/public`);
+          if (response.ok) {
+            const campaigns = await response.json();
+            const formattedCampaigns = campaigns.map((c: { id: string; title: string; _count?: { coupons?: number } }) => ({
+              id: c.id,
+              name: c.title,
+              userCount: c._count?.coupons || 0,
+            }));
+            setKuponCampaigns(formattedCampaigns);
+          }
+        } catch {
+          // Kupon API çalışmıyor olabilir
+        } finally {
+          setLoadingCampaigns(false);
+        }
+      };
+      fetchKuponCampaigns();
+    }
+  }, [selectedPlatform]);
+
+  const fetchCampaignUsers = async (campaignId: string) => {
+    if (selectedPlatform !== 'kupon') return;
+    if (campaignUsers[campaignId]) return;
+
+    try {
+      const response = await fetch(`${GISE_KUPON_API_URL}/campaigns/public/${campaignId}/users`);
+      if (response.ok) {
+        const data = await response.json();
+        const users: User[] = data.users.map((u: { email: string; fullName?: string | null; phoneNumber?: string | null }, index: number) => ({
+          id: `campaign-${campaignId}-${index}`,
+          email: u.email,
+          fullName: u.fullName || null,
+          phoneNumber: u.phoneNumber || null,
+        }));
+        setCampaignUsers((prev) => ({ ...prev, [campaignId]: users }));
+        setSelectedUsers((prev) => {
+          const newUsers = users.filter((u) => !prev.find((su) => su.email === u.email));
+          return [...prev, ...newUsers];
+        });
+      }
+    } catch (error) {
+      console.error('Kampanya kullanıcıları yüklenirken hata:', error);
+    }
+  };
+
   const handleAddAll = async () => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -186,15 +257,14 @@ export default function MailPage() {
         const data = await res.json();
         setAllUsersCount(data.total ?? 0);
         setUseAllUsers(true);
-        // Tum kullanicilar modu tek basina calissin; kampanya/tekil secimler karismasin.
         setSelectedUsers([]);
         setSelectedCampaigns([]);
         setCampaignUsers({});
-        setExcelEmails([]);
+        setExcelPhones([]);
         setExcelFileName('');
       }
     } catch (error) {
-      console.error('Tum kullanici sayimi alinamadi:', error);
+      console.error(error);
     }
   };
 
@@ -203,130 +273,34 @@ export default function MailPage() {
     setAllUsersCount(0);
   };
 
-  // Şablonları ve provider'ları çek
-  useEffect(() => {
-    const fetchTemplates = async () => {
-      setLoadingTemplates(true);
-      try {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/templates`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setTemplates(data);
-        }
-      } catch (error) {
-        console.error('Şablonlar yüklenirken hata:', error);
-      } finally {
-        setLoadingTemplates(false);
-      }
-    };
+  const availableCampaigns =
+    selectedPlatform === 'gise'
+      ? mockCampaigns.gise
+      : selectedPlatform === 'kupon'
+        ? kuponCampaigns
+        : [];
 
-    const fetchProviders = async () => {
-      try {
-        const token = localStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/mail/providers`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setMailProviders(data);
-          // Varsayılan provider'ı seç
-          const defaultProvider = data.find((p: MailProviderType) => p.isDefault);
-          if (defaultProvider) {
-            setSelectedProvider(defaultProvider.id);
-          }
-        }
-      } catch (error) {
-        console.error('Mail sağlayıcıları yüklenirken hata:', error);
-      }
-    };
-
-    fetchTemplates();
-    fetchProviders();
-  }, []);
-
-  // Kupon platformu seçildiğinde kampanyaları çek
-  useEffect(() => {
-    if (selectedPlatform === 'kupon') {
-      const fetchKuponCampaigns = async () => {
-        setLoadingCampaigns(true);
-        try {
-          const response = await fetch(`${GISE_KUPON_API_URL}/campaigns/public`);
-          if (response.ok) {
-            const campaigns = await response.json();
-            // Kampanya verisini uygun formata çevir
-            const formattedCampaigns = campaigns.map((c: any) => ({
-              id: c.id,
-              name: c.title,
-              userCount: c._count?.coupons || 0,
-            }));
-            setKuponCampaigns(formattedCampaigns);
-          }
-        } catch {
-          // Kupon API çalışmıyor olabilir, sessizce geç
-        } finally {
-          setLoadingCampaigns(false);
-        }
-      };
-      fetchKuponCampaigns();
-    }
-  }, [selectedPlatform]);
-
-  // Kampanya seçildiğinde kullanıcıları otomatik çek (sadece kupon için)
-  const fetchCampaignUsers = async (campaignId: string) => {
-    if (selectedPlatform !== 'kupon') return;
-    if (campaignUsers[campaignId]) return; // Zaten çekilmiş
-    
-    try {
-      const response = await fetch(`${GISE_KUPON_API_URL}/campaigns/public/${campaignId}/users`);
-      if (response.ok) {
-        const data = await response.json();
-        const users = data.users.map((u: any, index: number) => ({
-          id: `campaign-${campaignId}-${index}`,
-          email: u.email,
-          fullName: u.fullName || null,
-        }));
-        setCampaignUsers(prev => ({ ...prev, [campaignId]: users }));
-        // Otomatik olarak kullanıcıları seçilenlere ekle
-        setSelectedUsers(prev => {
-          const newUsers = users.filter((u: User) => !prev.find(su => su.email === u.email));
-          return [...prev, ...newUsers];
-        });
-      }
-    } catch (error) {
-      console.error('Kampanya kullanıcıları yüklenirken hata:', error);
-    }
-  };
-
-  const totalSteps = 4;
-
-  // Platformuna göre kampanyaları getir (gise: mock, kupon: gerçek API)
-  const availableCampaigns = selectedPlatform === 'gise' 
-    ? mockCampaigns.gise 
-    : selectedPlatform === 'kupon' 
-      ? kuponCampaigns 
-      : [];
   const filteredCampaigns = availableCampaigns
     .filter((c) => !selectedCampaigns.find((sc) => sc.id === c.id))
-    .filter((c) => campaignSearch === '' || 
-      c.name.toLowerCase().includes(campaignSearch.toLowerCase())
+    .filter(
+      (c) =>
+        campaignSearch === '' ||
+        c.name.toLowerCase().includes(campaignSearch.toLowerCase()),
     );
 
-  // Email bazlı duplicate kontrolü
-  const selectedEmails = selectedUsers.map(u => u.email.toLowerCase());
+  const selectedEmails = selectedUsers.map((u) => u.email.toLowerCase());
   const filteredUsers = userList.filter(
-    (u) => !selectedEmails.includes(u.email.toLowerCase())
+    (u) =>
+      !selectedEmails.includes(u.email.toLowerCase()) &&
+      u.phoneNumber &&
+      String(u.phoneNumber).trim(),
   );
-  // useAllUsers aktif ise backend tum kullanicilari ceker — sayim olarak goster
+
   const totalUsers = useAllUsers
     ? allUsersCount
-    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length + excelEmails.length;
+    : selectedCampaigns.reduce((acc, c) => acc + c.userCount, 0) + selectedUsers.length + excelPhones.length;
+
+  const totalSteps = 4;
 
   const handleDragStart = (campaign: Campaign) => {
     setDraggedCampaign(campaign);
@@ -340,7 +314,6 @@ export default function MailPage() {
     e.preventDefault();
     if (draggedCampaign && !selectedCampaigns.find((c) => c.id === draggedCampaign.id)) {
       setSelectedCampaigns([...selectedCampaigns, draggedCampaign]);
-      // Kupon platform için kullanıcıları otomatik çek
       if (selectedPlatform === 'kupon') {
         fetchCampaignUsers(draggedCampaign.id);
       }
@@ -350,54 +323,70 @@ export default function MailPage() {
 
   const removeCampaign = (id: string) => {
     setSelectedCampaigns(selectedCampaigns.filter((c) => c.id !== id));
-    // Kampanyadan gelen kullanıcıları da kaldır
     if (campaignUsers[id]) {
-      const emailsToRemove = campaignUsers[id].map(u => u.email);
-      setSelectedUsers(prev => prev.filter(u => !emailsToRemove.includes(u.email)));
+      const emailsToRemove = campaignUsers[id].map((u) => u.email);
+      setSelectedUsers((prev) => prev.filter((u) => !emailsToRemove.includes(u.email)));
     }
   };
 
   const addAllCampaigns = () => {
     setSelectedCampaigns(availableCampaigns);
-    // Kupon için tüm kampanyaların kullanıcılarını çek
     if (selectedPlatform === 'kupon') {
-      availableCampaigns.forEach(c => fetchCampaignUsers(c.id));
+      availableCampaigns.forEach((c) => fetchCampaignUsers(c.id));
     }
   };
 
+  const selectedTemplateObj = templates.find((t) => t.id === selectedTemplate);
+
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return selectedPlatform !== null;
-      case 2: return selectedCampaigns.length > 0 || selectedUsers.length > 0 || excelEmails.length > 0 || (useAllUsers && allUsersCount > 0);
-      case 3: return selectedTemplate !== null && subject.trim() !== '';
-      case 4: return selectedProvider !== null;
-      default: return false;
+      case 1:
+        return selectedPlatform !== null;
+      case 2:
+        return (
+          selectedCampaigns.length > 0 ||
+          selectedUsers.length > 0 ||
+          excelPhones.length > 0 ||
+          (useAllUsers && allUsersCount > 0)
+        );
+      case 3:
+        return selectedTemplate !== null;
+      case 4:
+        return selectedProvider !== null;
+      default:
+        return false;
     }
   };
 
   const handleSend = async () => {
     if (!selectedTemplate || !selectedProvider) return;
-
     setSending(true);
     try {
       const token = localStorage.getItem('accessToken');
-
       const body: any = {
-        subject,
+        label: label || selectedTemplateObj?.name || 'SMS Kampanyası',
         templateId: selectedTemplate,
         providerId: selectedProvider,
         platform: selectedPlatform,
       };
 
-      // selectAll modu: backend tum kullanicilari ceker — frontend liste yollamaz
       if (useAllUsers) {
         body.selectAll = true;
         body.audienceFilters = { isActive: true };
-        if (selectedPlatform) {
-          body.audienceFilters.platform = selectedPlatform;
-        }
+        if (selectedPlatform) body.audienceFilters.platform = selectedPlatform;
       } else {
-        body.recipients = [...selectedUsers.map((u) => u.email), ...excelEmails];
+        const uuidRe =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        body.recipients = [
+          ...selectedUsers.flatMap((u) => {
+            if (uuidRe.test(u.id)) return [u.id];
+            if (u.phoneNumber && String(u.phoneNumber).trim()) {
+              return [String(u.phoneNumber).trim()];
+            }
+            return [];
+          }),
+          ...excelPhones,
+        ];
       }
 
       const effectiveRecipientCount = useAllUsers
@@ -429,22 +418,22 @@ export default function MailPage() {
           }
         } else if (effectiveScheduleMode === 'manual') {
           body.scheduleTimes = manualSchedules
-            .filter(dt => dt)
-            .map(dt => new Date(dt).toISOString());
+            .filter((dt) => dt)
+            .map((dt) => new Date(dt).toISOString());
         }
       }
 
-      const response = await fetch(`${API_URL}/mail/send`, {
+      const response = await fetch(`${API_URL}/sms/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
       });
 
       const result = await response.json();
-      
+
       if (response.ok) {
         const lines: string[] = [`Toplam alıcı: ${result.totalRecipients}`];
         if (result.excludedUnsubscribed > 0) {
@@ -470,9 +459,9 @@ export default function MailPage() {
         setSelectedUsers([]);
         setUseAllUsers(false);
         setAllUsersCount(0);
-        setExcelEmails([]);
+        setExcelPhones([]);
         setExcelFileName('');
-        setSubject('');
+        setLabel('');
         setSelectedTemplate(null);
         setSchedulingExtraOpen(false);
         setDailyLimit('');
@@ -482,7 +471,7 @@ export default function MailPage() {
         setManualSchedules([]);
         setSendResultModal({
           type: 'success',
-          title: result.queued > 0 ? 'Gönderim Planlandı' : 'Mail Gönderildi',
+          title: result.queued > 0 ? 'Gönderim Planlandı' : 'SMS Gönderildi',
           lines,
           logId: result.logId,
         });
@@ -490,11 +479,11 @@ export default function MailPage() {
         setSendResultModal({
           type: 'error',
           title: 'Gönderim Başarısız',
-          message: result.message || 'Mail gönderilemedi',
+          message: result.message || 'SMS gönderilemedi',
         });
       }
     } catch (error) {
-      console.error('Mail gönderilirken hata:', error);
+      console.error('SMS gönderilirken hata:', error);
       setSendResultModal({
         type: 'error',
         title: 'Hata',
@@ -507,23 +496,45 @@ export default function MailPage() {
 
   return (
     <div className="space-y-6">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Toplu Mail Gönderimi</h1>
-          <p className="text-sm text-gray-500 mt-1">Kampanya bazlı toplu mail gönderimi</p>
+          <h1 className="text-2xl font-bold text-gray-900">Toplu SMS Gönderimi</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Posta Güvercini ile toplu SMS gönderimi
+          </p>
         </div>
+        <Link
+          href="/panel/sms-templates"
+          className="text-sm font-medium text-[#2b2973] hover:underline"
+        >
+          SMS Şablonları →
+        </Link>
       </div>
 
-      {/* Progress Steps */}
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
+        {/* Progress Steps — tıklanamaz, sadece Geri/İleri ile geçilir */}
         <div className="flex items-center justify-between mb-4">
           {[
-            { step: 1, title: 'Platform', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
-            { step: 2, title: 'Hedef Kitle', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-            { step: 3, title: 'Şablon', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
-            { step: 4, title: 'Gönderim', icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8' },
+            {
+              step: 1,
+              title: 'Platform',
+              icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+            },
+            {
+              step: 2,
+              title: 'Hedef Kitle',
+              icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
+            },
+            {
+              step: 3,
+              title: 'Şablon',
+              icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
+            },
+            {
+              step: 4,
+              title: 'Gönderim',
+              icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8',
+            },
           ].map((item, index) => (
             <div key={item.step} className="flex items-center">
               <div className="flex flex-col items-center">
@@ -532,8 +543,8 @@ export default function MailPage() {
                     currentStep === item.step
                       ? 'bg-[#2b2973] text-white'
                       : currentStep > item.step
-                      ? 'bg-green-100 text-green-600'
-                      : 'bg-gray-100 text-gray-400'
+                        ? 'bg-green-100 text-green-600'
+                        : 'bg-gray-100 text-gray-400'
                   }`}
                 >
                   {currentStep > item.step ? (
@@ -546,31 +557,34 @@ export default function MailPage() {
                     </svg>
                   )}
                 </div>
-                <span className={`text-xs mt-2 font-medium ${
-                  currentStep === item.step ? 'text-[#2b2973]' : 'text-gray-500'
-                }`}>
+                <span
+                  className={`text-xs mt-2 font-medium ${
+                    currentStep === item.step ? 'text-[#2b2973]' : 'text-gray-500'
+                  }`}
+                >
                   {item.title}
                 </span>
               </div>
               {index < 3 && (
-                <div className={`w-12 lg:w-20 h-0.5 mx-2 rounded-full ${
-                  currentStep > item.step ? 'bg-green-400' : 'bg-gray-200'
-                }`} />
+                <div
+                  className={`w-12 lg:w-20 h-0.5 mx-2 rounded-full ${
+                    currentStep > item.step ? 'bg-green-400' : 'bg-gray-200'
+                  }`}
+                />
               )}
             </div>
           ))}
         </div>
 
-        {/* Step Content */}
         <div className="min-h-[400px]">
-          {/* Step 1: Platform Selection */}
           {currentStep === 1 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-900">Platform Seçin</h2>
-              <p className="text-sm text-gray-500">Mail göndermek istediğiniz platformu seçin</p>
-              
+              <p className="text-sm text-gray-500">SMS göndermek istediğiniz platformu seçin</p>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <button
+                  type="button"
                   onClick={() => setSelectedPlatform('gise')}
                   className={`relative p-8 rounded-2xl border-2 transition-all flex items-center justify-center ${
                     selectedPlatform === 'gise'
@@ -578,13 +592,7 @@ export default function MailPage() {
                       : 'border-gray-200 hover:border-[#a02073] hover:bg-pink-50/50'
                   }`}
                 >
-                  <Image 
-                    src="/GPW.png" 
-                    alt="Gişe Kıbrıs" 
-                    width={200} 
-                    height={60} 
-                    className="h-50 w-auto"
-                  />
+                  <Image src="/GPW.png" alt="Gişe Kıbrıs" width={200} height={60} className="h-50 w-auto" />
                   {selectedPlatform === 'gise' && (
                     <div className="absolute top-4 right-4 w-6 h-6 bg-[#a02073] rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -595,6 +603,7 @@ export default function MailPage() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => setSelectedPlatform('kupon')}
                   className={`relative p-8 rounded-2xl border-2 transition-all flex items-center justify-center ${
                     selectedPlatform === 'kupon'
@@ -602,13 +611,7 @@ export default function MailPage() {
                       : 'border-gray-200 hover:border-[#2aa146] hover:bg-green-50/50'
                   }`}
                 >
-                  <Image 
-                    src="/KKW.png" 
-                    alt="Kupon Kıbrıs" 
-                    width={200} 
-                    height={200} 
-                    className="h-50 w-auto"
-                  />
+                  <Image src="/KKW.png" alt="Kupon Kıbrıs" width={200} height={200} className="h-50 w-auto" />
                   {selectedPlatform === 'kupon' && (
                     <div className="absolute top-4 right-4 w-6 h-6 bg-[#2aa146] rounded-full flex items-center justify-center">
                       <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -621,41 +624,39 @@ export default function MailPage() {
             </div>
           )}
 
-
-          {/* Step 2: Campaign/User Selection */}
           {currentStep === 2 && (
             <div className="space-y-4">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Hedef Kitle Seçimi</h2>
-                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın veya Excel&apos;den e-posta aktarın</p>
+                  <p className="text-sm text-gray-500">Kampanyaları sürükleyip havuza bırakın veya Excel&apos;den telefon numarası aktarın</p>
                 </div>
                 <ExcelImportButton
-                  kind="email"
+                  kind="phone"
                   onImported={(values, _result, fileName) => {
                     setUseAllUsers(false);
                     setAllUsersCount(0);
                     setExcelFileName(fileName);
-                    setExcelEmails((prev) => {
-                      const seen = new Set(prev.map((e) => e.toLowerCase()));
+                    setExcelPhones((prev) => {
+                      const seen = new Set(prev.map((p) => p.replace(/\D/g, '')));
                       const merged = [...prev];
-                      for (const email of values) {
-                        const key = email.toLowerCase();
+                      for (const phone of values) {
+                        const key = phone.replace(/\D/g, '');
                         if (!key || seen.has(key)) continue;
                         seen.add(key);
-                        merged.push(email);
+                        merged.push(phone);
                       }
                       return merged;
                     });
                   }}
                 />
               </div>
-              
+
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
                 {/* Sol: Kullanıcılar */}
                 <div className="space-y-3 min-w-0">
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                    <span className="w-2 h-2 bg-blue-500 rounded-full" />
                     Kullanıcılar
                     {loadingUsers && (
                       <span className="text-xs text-gray-400">Yükleniyor...</span>
@@ -665,6 +666,7 @@ export default function MailPage() {
                     )}
                     {!useAllUsers ? (
                       <button
+                        type="button"
                         onClick={handleAddAll}
                         className="ml-auto text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
                       >
@@ -672,6 +674,7 @@ export default function MailPage() {
                       </button>
                     ) : (
                       <button
+                        type="button"
                         onClick={clearAllUsers}
                         className="ml-auto text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
                       >
@@ -692,7 +695,7 @@ export default function MailPage() {
                           Tüm aktif kullanıcılar seçili ({allUsersCount.toLocaleString('tr-TR')} kişi)
                         </p>
                         <p className="text-xs text-blue-700">
-                          Listeyi browser&apos;a indirmiyoruz. Backend göndereceğin anda DB&apos;den çeker.
+                          Backend göndereceğin anda DB&apos;den çeker; telefonsuzlar atılır.
                         </p>
                       </div>
                     </div>
@@ -704,13 +707,14 @@ export default function MailPage() {
                     </svg>
                     <input
                       type="text"
-                      placeholder="Kullanıcı ara..."
+                      placeholder="İsim, e-posta veya telefon..."
                       value={userSearch}
                       onChange={(e) => setUserSearch(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900"
                     />
                     {userSearch && (
                       <button
+                        type="button"
                         onClick={() => setUserSearch('')}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                       >
@@ -725,19 +729,20 @@ export default function MailPage() {
                     {loadingUsers ? (
                       <div className="flex items-center justify-center py-8">
                         <svg className="animate-spin h-6 w-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
                       </div>
                     ) : filteredUsers.length === 0 && !loadingUsers ? (
                       <div className="text-center text-gray-400 text-sm py-8">
-                        {userSearch ? 'Aramanızla eşleşen kullanıcı bulunamadı' : 'Tüm kullanıcılar seçildi'}
+                        {userSearch ? 'Aramanızla eşleşen telefonlu kullanıcı bulunamadı' : 'Telefonlu kullanıcı kalmadı veya tümü seçildi'}
                       </div>
                     ) : (
                       <div className="flex flex-col gap-2">
                         {filteredUsers.map((user) => (
                           <button
                             key={user.email}
+                            type="button"
                             onClick={() => {
                               if (!selectedEmails.includes(user.email.toLowerCase())) {
                                 setSelectedUsers([...selectedUsers, user]);
@@ -751,6 +756,7 @@ export default function MailPage() {
                             <div className="min-w-0 flex-1">
                               <p className="font-medium text-gray-900 text-xs truncate">{user.fullName || '-'}</p>
                               <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                              <p className="text-[10px] text-gray-400 truncate">{user.phoneNumber}</p>
                             </div>
                             <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -761,8 +767,8 @@ export default function MailPage() {
                         {loadingMoreUsers && (
                           <div className="flex justify-center py-3">
                             <svg className="animate-spin h-5 w-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                             </svg>
                           </div>
                         )}
@@ -777,12 +783,13 @@ export default function MailPage() {
                 {/* Orta: Mevcut Kampanyalar */}
                 <div className="space-y-3 min-w-0">
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
+                    <span className="w-2 h-2 bg-gray-400 rounded-full" />
                     Mevcut Kampanyalar ({availableCampaigns.length})
                     {loadingCampaigns && (
                       <span className="text-xs text-gray-400">Yükleniyor...</span>
                     )}
                     <button
+                      type="button"
                       onClick={addAllCampaigns}
                       className="ml-auto text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
                     >
@@ -803,6 +810,7 @@ export default function MailPage() {
                     />
                     {campaignSearch && (
                       <button
+                        type="button"
                         onClick={() => setCampaignSearch('')}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                       >
@@ -817,8 +825,8 @@ export default function MailPage() {
                     {loadingCampaigns ? (
                       <div className="h-full flex items-center justify-center py-8">
                         <svg className="animate-spin h-6 w-6 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                         </svg>
                       </div>
                     ) : filteredCampaigns.length === 0 ? (
@@ -849,22 +857,22 @@ export default function MailPage() {
                 {/* Sağ: Seçilen Havuz */}
                 <div className="space-y-3 min-w-0">
                   <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 flex-wrap">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                    <span className="w-2 h-2 bg-green-500 rounded-full" />
                     Seçilen Havuz
-                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0 || excelEmails.length > 0) && (
+                    {(useAllUsers || selectedCampaigns.length > 0 || selectedUsers.length > 0 || excelPhones.length > 0) && (
                       <>
                         <span className="text-xs text-green-600 font-semibold">
                           {totalUsers.toLocaleString()} kullanıcı
                         </span>
                         <button
+                          type="button"
                           onClick={() => {
                             setSelectedCampaigns([]);
                             setSelectedUsers([]);
                             setCampaignUsers({});
-                            setUseAllUsers(false);
-                            setAllUsersCount(0);
-                            setExcelEmails([]);
+                            setExcelPhones([]);
                             setExcelFileName('');
+                            clearAllUsers();
                           }}
                           className="ml-auto text-xs text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
                         >
@@ -883,7 +891,7 @@ export default function MailPage() {
                       draggedCampaign ? 'border-green-400 bg-green-100' : 'border-green-200'
                     }`}
                   >
-                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 && excelEmails.length === 0 ? (
+                    {!useAllUsers && selectedCampaigns.length === 0 && selectedUsers.length === 0 && excelPhones.length === 0 ? (
                       <div className="h-full min-h-[220px] flex flex-col items-center justify-center text-green-600">
                         <svg className="w-12 h-12 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -894,28 +902,26 @@ export default function MailPage() {
                       <div className="space-y-2">
                         {useAllUsers && (
                           <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                            <p className="text-sm font-medium text-blue-900">
-                              Tüm aktif kullanıcılar seçili
-                            </p>
+                            <p className="text-sm font-medium text-blue-900">Tüm aktif kullanıcılar seçili</p>
                             <p className="text-xs text-blue-700">
-                              {allUsersCount.toLocaleString('tr-TR')} kullanıcı backend tarafından gönderim anında çekilecek.
+                              {allUsersCount.toLocaleString('tr-TR')} kullanıcı backend tarafından gönderim anında çekilecek. Telefonsuzlar atılır.
                             </p>
                           </div>
                         )}
-                        {excelEmails.length > 0 && (
+                        {excelPhones.length > 0 && (
                           <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 flex items-center justify-between group">
                             <div className="min-w-0">
                               <p className="text-sm font-medium text-emerald-900 truncate">
-                                Excel: {excelFileName || 'Aktarılan e-postalar'}
+                                Excel: {excelFileName || 'Aktarılan numaralar'}
                               </p>
                               <p className="text-xs text-emerald-700">
-                                {excelEmails.length.toLocaleString('tr-TR')} e-posta doğrudan gönderilecek
+                                {excelPhones.length.toLocaleString('tr-TR')} telefon numarası doğrudan gönderilecek
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => {
-                                setExcelEmails([]);
+                                setExcelPhones([]);
                                 setExcelFileName('');
                               }}
                               className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
@@ -940,8 +946,12 @@ export default function MailPage() {
                                 <div className="min-w-0 flex-1">
                                   <p className="font-medium text-gray-900 text-xs truncate">{user.fullName || '-'}</p>
                                   <p className="text-[10px] text-gray-500 truncate">{user.email}</p>
+                                  {user.phoneNumber && (
+                                    <p className="text-[10px] text-gray-400 truncate">{user.phoneNumber}</p>
+                                  )}
                                 </div>
                                 <button
+                                  type="button"
                                   onClick={() => setSelectedUsers(selectedUsers.filter((u) => u.id !== user.id))}
                                   className="w-5 h-5 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
                                 >
@@ -963,6 +973,7 @@ export default function MailPage() {
                               <p className="text-xs text-gray-500">{campaign.userCount.toLocaleString()} kullanıcı</p>
                             </div>
                             <button
+                              type="button"
                               onClick={() => removeCampaign(campaign.id)}
                               className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 flex-shrink-0"
                             >
@@ -980,17 +991,15 @@ export default function MailPage() {
             </div>
           )}
 
-          {/* Step 3: Template Selection */}
           {currentStep === 3 && (
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold text-gray-900">Şablon ve Konu</h2>
-              <p className="text-sm text-gray-500">Mail için şablon seçin ve konu girin</p>
-              
-              {/* Konu Alanı */}
+              <h2 className="text-lg font-semibold text-gray-900">Şablon ve Etiket</h2>
+              <p className="text-sm text-gray-500">SMS için şablon seçin ve kampanya etiketi girin</p>
+
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Mail Konusu</label>
-                  {templates.find(t => t.id === selectedTemplate)?.subject && (
+                  <label className="block text-sm font-medium text-gray-700">Kampanya Etiketi</label>
+                  {templates.find((t) => t.id === selectedTemplate)?.name && (
                     <span className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -1001,205 +1010,112 @@ export default function MailPage() {
                 </div>
                 <input
                   type="text"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  readOnly={!!templates.find(t => t.id === selectedTemplate)?.subject}
-                  placeholder="Mail konusunu yazın..."
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  readOnly={!!templates.find((t) => t.id === selectedTemplate)?.name}
+                  placeholder="Kampanya etiketini yazın..."
                   className={`w-full px-4 py-3 border rounded-xl transition-all text-gray-900 ${
-                    templates.find(t => t.id === selectedTemplate)?.subject
+                    templates.find((t) => t.id === selectedTemplate)?.name
                       ? 'border-purple-200 bg-purple-50 cursor-not-allowed text-purple-800 focus:outline-none'
                       : 'border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500'
                   }`}
                 />
               </div>
-              
-              <div className="mt-6">
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                 {loadingTemplates ? (
-                  <div className="flex items-center justify-center py-12">
+                  <div className="col-span-full flex items-center justify-center py-12">
                     <svg className="animate-spin h-8 w-8 text-[#2b2973]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                     </svg>
                   </div>
                 ) : templates.length === 0 ? (
-                  <div className="text-center py-12">
+                  <div className="col-span-full text-center py-12">
                     <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                       <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
                       </svg>
                     </div>
                     <p className="text-gray-500 mb-4">Henüz şablon oluşturulmamış</p>
-                    <a href="/panel/templates/new" className="text-[#2b2973] font-medium hover:underline">Şablon Oluştur →</a>
+                    <a href="/panel/sms-templates" className="text-[#2b2973] font-medium hover:underline">Şablon Oluştur →</a>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {/* İlk 4 — kare kart */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      {templates.slice(0, 4).map((template) => (
-                        <div key={template.id} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedTemplate(template.id);
-                              setSubject(template.subject || '');
-                            }}
-                            className={`w-full relative p-3 rounded-xl border-2 transition-all text-left ${
-                              selectedTemplate === template.id
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 hover:border-purple-300'
-                            }`}
-                          >
-                            <div className="w-full aspect-square bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-3 overflow-hidden relative">
-                              {template.htmlContent ? (
-                                <iframe
-                                  srcDoc={(() => {
-                                    const isFullHtml = template.htmlContent.trim().startsWith('<!DOCTYPE') || template.htmlContent.trim().toLowerCase().startsWith('<html');
-                                    if (isFullHtml) {
-                                      return template.htmlContent.replace('<body', '<body style="transform:scale(0.25);transform-origin:top left;width:400%;pointer-events:none;margin:0;padding:4px;"');
-                                    }
-                                    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:4px;transform:scale(0.25);transform-origin:top left;width:400%;pointer-events:none;}${template.cssContent || ''}</style></head><body>${template.htmlContent}</body></html>`;
-                                  })()}
-                                  className="w-full h-full border-0 pointer-events-none"
-                                  title={template.name}
-                                  sandbox=""
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                              )}
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewTemplate(template.id);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setPreviewTemplate(template.id);
-                                  }
-                                }}
-                                className="absolute bottom-2 right-2 px-2 py-1 bg-white border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50 shadow-sm flex items-center gap-1"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                                Önizle
-                              </span>
+                  templates.map((template) => (
+                    <div key={template.id} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTemplate(template.id);
+                          setLabel(template.name || '');
+                        }}
+                        className={`w-full relative p-4 rounded-xl border-2 transition-all text-left ${
+                          selectedTemplate === template.id
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="w-full h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg mb-3 overflow-hidden p-2">
+                          {template.textContent ? (
+                            <div
+                              className="w-full h-full text-[6px] leading-tight text-gray-700 whitespace-pre-wrap overflow-hidden pointer-events-none"
+                              style={{ transform: 'scale(0.85)', transformOrigin: 'top left' }}
+                            >
+                              {template.textContent}
                             </div>
-                            <h3 className="font-semibold text-gray-900 text-sm truncate">{template.name}</h3>
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description || 'Açıklama yok'}</p>
-                            {selectedTemplate === template.id && (
-                              <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
-                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                            )}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* 5+ — satır satır */}
-                    {templates.length > 4 && (
-                      <div className="flex flex-col gap-2">
-                        {templates.slice(4).map((template) => (
-                          <div
-                            key={template.id}
-                            className={`flex items-center gap-3 p-2.5 rounded-xl border-2 transition-all ${
-                              selectedTemplate === template.id
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 hover:border-purple-300 bg-white'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedTemplate(template.id);
-                                setSubject(template.subject || '');
-                              }}
-                              className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                            >
-                              <div className="w-14 h-14 flex-shrink-0 rounded-lg overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
-                                {template.htmlContent ? (
-                                  <iframe
-                                    srcDoc={(() => {
-                                      const isFullHtml = template.htmlContent.trim().startsWith('<!DOCTYPE') || template.htmlContent.trim().toLowerCase().startsWith('<html');
-                                      if (isFullHtml) {
-                                        return template.htmlContent.replace('<body', '<body style="transform:scale(0.2);transform-origin:top left;width:500%;pointer-events:none;margin:0;padding:2px;"');
-                                      }
-                                      return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:2px;transform:scale(0.2);transform-origin:top left;width:500%;pointer-events:none;}${template.cssContent || ''}</style></head><body>${template.htmlContent}</body></html>`;
-                                    })()}
-                                    className="w-full h-full border-0 pointer-events-none"
-                                    title={template.name}
-                                    sandbox=""
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <h3 className="font-semibold text-gray-900 text-sm truncate">{template.name}</h3>
-                                <p className="text-xs text-gray-500 truncate">{template.description || 'Açıklama yok'}</p>
-                              </div>
-                              {selectedTemplate === template.id && (
-                                <div className="w-5 h-5 flex-shrink-0 bg-purple-500 rounded-full flex items-center justify-center">
-                                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPreviewTemplate(template.id)}
-                              className="flex-shrink-0 px-2.5 py-1.5 bg-white border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50 flex items-center gap-1"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                               </svg>
-                              Önizle
-                            </button>
+                            </div>
+                          )}
+                        </div>
+                        <h3 className="font-semibold text-gray-900 text-sm">{template.name}</h3>
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{template.description || 'Açıklama yok'}</p>
+                        {selectedTemplate === template.id && (
+                          <div className="absolute top-2 right-2 w-5 h-5 bg-purple-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewTemplate(template.id)}
+                        className="absolute bottom-16 right-2 px-2 py-1 bg-white border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all flex items-center gap-1 shadow-sm"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Önizle
+                      </button>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
           )}
 
-          {/* Şablon Önizleme Modal */}
           {previewTemplate && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-                {/* Modal Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
                       <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900">{templates.find(t => t.id === previewTemplate)?.name} - Önizleme</h3>
-                      <p className="text-xs text-gray-500">{templates.find(t => t.id === previewTemplate)?.description || 'Şablon önizlemesi'}</p>
+                      <h3 className="font-semibold text-gray-900">{templates.find((t) => t.id === previewTemplate)?.name} - Önizleme</h3>
+                      <p className="text-xs text-gray-500">{templates.find((t) => t.id === previewTemplate)?.description || 'Şablon önizlemesi'}</p>
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setPreviewTemplate(null)}
                     className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors"
                   >
@@ -1209,50 +1125,42 @@ export default function MailPage() {
                   </button>
                 </div>
 
-                {/* Modal Body - Mail Önizleme */}
                 <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    {/* Email Header */}
                     <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                       <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                        <span className="font-medium">Kimden:</span>
-                        <span>noreply@practicapp.com</span>
+                        <span className="font-medium">Gönderen:</span>
+                        <span>Posta Güvercini SMS</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                        <span className="font-medium">Kime:</span>
+                        <span className="font-medium">Alıcı:</span>
                         <span className="text-blue-600">{totalUsers} kullanıcı</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm text-gray-600">Konu:</span>
-                        <span className="font-semibold text-gray-900">{subject || '(Konu girilmedi)'}</span>
+                        <span className="font-medium text-sm text-gray-600">Etiket:</span>
+                        <span className="font-semibold text-gray-900">{label || '(Etiket girilmedi)'}</span>
                       </div>
                     </div>
 
-                    {/* Email Body - Dinamik HTML içerik (iframe ile izolasyon) */}
-                    <div className="bg-white overflow-hidden">
+                    <div className="bg-white p-6">
                       {(() => {
-                        const currentTemplate = templates.find(t => t.id === previewTemplate);
-                        if (currentTemplate?.htmlContent) {
-                          const isFullHtml = currentTemplate.htmlContent.trim().startsWith('<!DOCTYPE') || currentTemplate.htmlContent.trim().toLowerCase().startsWith('<html');
-                          const srcDoc = isFullHtml
-                            ? currentTemplate.htmlContent
-                            : (currentTemplate.cssContent
-                              ? `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;}*{max-width:100%;box-sizing:border-box;}img{height:auto;}${currentTemplate.cssContent}</style></head><body>${currentTemplate.htmlContent}</body></html>`
-                              : `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;padding:16px;font-family:Arial,sans-serif;}*{max-width:100%;box-sizing:border-box;}img{height:auto;}</style></head><body>${currentTemplate.htmlContent}</body></html>`);
+                        const currentTemplate = templates.find((t) => t.id === previewTemplate);
+                        if (currentTemplate?.textContent) {
                           return (
-                            <iframe
-                              srcDoc={srcDoc}
-                              className="w-full border-0"
-                              style={{ height: '400px', maxHeight: '50vh' }}
-                              title="Email Önizleme"
-                              sandbox="allow-same-origin"
-                            />
+                            <div className="max-w-sm mx-auto">
+                              <div className="bg-green-100 rounded-2xl rounded-bl-sm px-4 py-3 text-sm text-gray-900 whitespace-pre-wrap">
+                                {personalizePreview(currentTemplate.textContent)}
+                              </div>
+                              <p className="text-xs text-gray-400 mt-2 text-right">
+                                {personalizePreview(currentTemplate.textContent).length}/{SMS_MAX_CHARS} karakter
+                              </p>
+                            </div>
                           );
                         }
                         return (
                           <div className="text-center py-8 text-gray-400">
                             <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                             </svg>
                             <p>Şablon içeriği bulunamadı</p>
                           </div>
@@ -1260,31 +1168,31 @@ export default function MailPage() {
                       })()}
                     </div>
 
-                    {/* Email Footer */}
                     <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 text-center">
-                      <p className="text-xs text-gray-500">Bu e-posta PracticApp tarafından gönderilmiştir.</p>
-                      <p className="text-xs text-gray-400 mt-1">İptal etmek için tıklayın | Gizlilik Politikası</p>
+                      <p className="text-xs text-gray-500">Bu SMS PracticApp tarafından gönderilecektir.</p>
+                      <p className="text-xs text-gray-400 mt-1">Placeholder&apos;lar gönderim anında kişiselleştirilir</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Modal Footer */}
                 <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
                   <p className="text-sm text-gray-500">
-                    Bu şablon seçildikten sonra mailiniz bu şekilde görünecek
+                    Bu şablon seçildikten sonra SMS&apos;iniz bu şekilde görünecek
                   </p>
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => setPreviewTemplate(null)}
                       className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
                     >
                       Kapat
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         setSelectedTemplate(previewTemplate);
-                        const tpl = templates.find(t => t.id === previewTemplate);
-                        setSubject(tpl?.subject || '');
+                        const tpl = templates.find((t) => t.id === previewTemplate);
+                        setLabel(tpl?.name || '');
                         setPreviewTemplate(null);
                       }}
                       className="px-4 py-2 bg-purple-500 text-white text-sm font-medium rounded-lg hover:bg-purple-600 transition-colors"
@@ -1297,41 +1205,35 @@ export default function MailPage() {
             </div>
           )}
 
-          {/* Step 4: Mail Provider Selection */}
           {currentStep === 4 && (
             <div className="space-y-4">
               <h2 className="text-lg font-semibold text-gray-900">Gönderim Servisi</h2>
-              <p className="text-sm text-gray-500">Mail gönderim servisini seçin</p>
+              <p className="text-sm text-gray-500">SMS gönderim servisini seçin</p>
               
-              {mailProviders.length === 0 ? (
+              {providers.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
                     </svg>
                   </div>
-                  <p className="text-gray-500 mb-2">Henüz mail sağlayıcısı eklenmemiş</p>
-                  <p className="text-sm text-gray-400">Veritabanına bir mail provider ekleyin</p>
+                  <p className="text-gray-500 mb-2">Henüz SMS sağlayıcısı eklenmemiş</p>
+                  <p className="text-sm text-gray-400">Veritabanına bir SMS provider ekleyin</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-                  {mailProviders.map((provider) => {
-                    // Provider tipine göre renk belirle
+                  {providers.map((provider) => {
                     const colorMap: Record<string, string> = {
-                      smtp: 'bg-gray-100 text-gray-600',
-                      aws: 'bg-orange-100 text-orange-600',
-                      sendpulse: 'bg-blue-100 text-blue-600',
-                      mailgun: 'bg-red-100 text-red-600',
+                      postaguvercini: 'bg-green-100 text-green-600',
                     };
                     const iconMap: Record<string, string> = {
-                      smtp: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01',
-                      aws: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z',
-                      sendpulse: 'M13 10V3L4 14h7v7l9-11h-7z',
-                      mailgun: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+                      postaguvercini: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
                     };
+                    const defaultIcon = iconMap.postaguvercini;
                     return (
                       <button
                         key={provider.id}
+                        type="button"
                         onClick={() => setSelectedProvider(provider.id)}
                         className={`relative p-4 rounded-xl border-2 transition-all text-left ${
                           selectedProvider === provider.id
@@ -1341,7 +1243,7 @@ export default function MailPage() {
                       >
                         <div className={`w-10 h-10 ${colorMap[provider.type] || 'bg-gray-100 text-gray-600'} rounded-lg flex items-center justify-center mb-3`}>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap[provider.type] || iconMap.smtp} />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={iconMap[provider.type] || defaultIcon} />
                           </svg>
                         </div>
                         <h3 className="font-medium text-gray-900 text-sm">{provider.name}</h3>
@@ -1362,7 +1264,6 @@ export default function MailPage() {
                 </div>
               )}
 
-              {/* Zamanlama Ayarlari */}
               {selectedProvider && (
                 <div className="mt-8 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
                   <h3 className="font-semibold text-gray-900 mb-1">Gönderim Zamanlama</h3>
@@ -1381,7 +1282,7 @@ export default function MailPage() {
                       }`}
                     >
                       <p className={`text-sm font-medium ${!schedulingExtraOpen ? 'text-blue-700' : 'text-gray-900'}`}>Tamamı</p>
-                      <p className="text-xs text-gray-500 mt-0.5">10.000 mail / 30 dk aralık</p>
+                      <p className="text-xs text-gray-500 mt-0.5">10.000 SMS / 30 dk aralık</p>
                     </button>
                     <button
                       type="button"
@@ -1416,7 +1317,6 @@ export default function MailPage() {
                     </div>
                   ) : (
                     <>
-                  {/* Batch Limit */}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Batch Başına Limit</label>
                     <input
@@ -1430,10 +1330,9 @@ export default function MailPage() {
                       placeholder={`örn: 500 (toplam ${totalUsers.toLocaleString()} kişi)`}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-gray-900 placeholder-gray-400"
                     />
-                    <p className="text-xs text-gray-400 mt-1">Her seferde kaç mail gönderilsin</p>
+                    <p className="text-xs text-gray-400 mt-1">Her seferde kaç SMS gönderilsin</p>
                   </div>
 
-                  {/* Zamanlama Modu Secimi */}
                   {dailyLimit && parseInt(dailyLimit) > 0 && parseInt(dailyLimit) < totalUsers && (
                     <div className="space-y-4">
                       <label className="block text-sm font-medium text-gray-700">Zamanlama Modu</label>
@@ -1465,7 +1364,6 @@ export default function MailPage() {
                         ))}
                       </div>
 
-                      {/* Immediate: Aralik secici */}
                       {scheduleMode === 'immediate' && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Gönderim Aralığı (Saat)</label>
@@ -1487,7 +1385,6 @@ export default function MailPage() {
                         </div>
                       )}
 
-                      {/* StartDate: Tarih + Aralik */}
                       {scheduleMode === 'startDate' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
@@ -1521,7 +1418,6 @@ export default function MailPage() {
                         </div>
                       )}
 
-                      {/* Manuel: Her batch icin ayri tarih */}
                       {scheduleMode === 'manual' && (
                         <div className="space-y-3">
                           <p className="text-xs text-gray-500">Her batch için gönderim tarihi ve saatini belirleyin</p>
@@ -1554,16 +1450,15 @@ export default function MailPage() {
                         </div>
                       )}
 
-                      {/* Batch Onizleme */}
                       {(() => {
                         const batchSize = parseInt(dailyLimit);
                         const batchCount = Math.ceil(totalUsers / batchSize);
                         const previewBatches: Array<{ num: number; count: number; time: string }> = [];
 
                         for (let i = 0; i < batchCount; i++) {
-                          const start = i * batchSize;
-                          const end = Math.min(start + batchSize, totalUsers);
-                          const count = end - start;
+                          const batchStart = i * batchSize;
+                          const batchEnd = Math.min(batchStart + batchSize, totalUsers);
+                          const count = batchEnd - batchStart;
                           let time = '';
 
                           if (scheduleMode === 'immediate') {
@@ -1616,7 +1511,6 @@ export default function MailPage() {
                 </div>
               )}
 
-              {/* Summary */}
               {selectedProvider && (
                 <div className="mt-4 p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
                   <h3 className="font-semibold text-gray-900 mb-3">Özet</h3>
@@ -1626,8 +1520,8 @@ export default function MailPage() {
                       <p className="font-medium text-gray-900">{selectedPlatform === 'gise' ? 'Gişe Kıbrıs' : 'Kupon Kıbrıs'}</p>
                     </div>
                     <div>
-                      <p className="text-gray-500">Konu</p>
-                      <p className="font-medium text-gray-900 truncate">{subject}</p>
+                      <p className="text-gray-500">Etiket</p>
+                      <p className="font-medium text-gray-900 truncate">{label}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Hedef Kitle</p>
@@ -1635,7 +1529,7 @@ export default function MailPage() {
                     </div>
                     <div>
                       <p className="text-gray-500">Servis</p>
-                      <p className="font-medium text-gray-900">{mailProviders.find(p => p.id === selectedProvider)?.name}</p>
+                      <p className="font-medium text-gray-900">{providers.find((p) => p.id === selectedProvider)?.name}</p>
                     </div>
                     <div>
                       <p className="text-gray-500">Zamanlama</p>
@@ -1660,9 +1554,9 @@ export default function MailPage() {
           )}
         </div>
 
-        {/* Navigation Buttons */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
           <button
+            type="button"
             onClick={() => setCurrentStep(currentStep - 1)}
             disabled={currentStep === 1}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-all ${
@@ -1679,6 +1573,7 @@ export default function MailPage() {
 
           {currentStep < totalSteps ? (
             <button
+              type="button"
               onClick={() => setCurrentStep(currentStep + 1)}
               disabled={!canProceed()}
               className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl transition-all ${
@@ -1694,6 +1589,7 @@ export default function MailPage() {
             </button>
           ) : (
             <button
+              type="button"
               onClick={handleSend}
               disabled={!canProceed() || sending}
               className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-xl transition-all ${
@@ -1723,13 +1619,14 @@ export default function MailPage() {
         </div>
       </div>
 
-      {/* Gönderim Sonucu Popup */}
       {sendResultModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
-              sendResultModal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
-            }`}>
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                sendResultModal.type === 'success' ? 'bg-green-100' : 'bg-red-100'
+              }`}
+            >
               {sendResultModal.type === 'success' ? (
                 <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1755,11 +1652,12 @@ export default function MailPage() {
               <p className="text-gray-500 text-center text-sm mb-6">{sendResultModal.message}</p>
             )}
             <button
+              type="button"
               onClick={() => {
                 const modal = sendResultModal;
                 setSendResultModal(null);
                 if (modal.type === 'success' && modal.logId) {
-                  router.push(`/panel/mail-reports?highlight=${modal.logId}`);
+                  router.push(`/panel/sms-reports?highlight=${modal.logId}`);
                 }
               }}
               className={`w-full px-4 py-2.5 text-sm font-medium rounded-xl transition-colors ${

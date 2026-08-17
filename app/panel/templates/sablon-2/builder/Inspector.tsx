@@ -1,0 +1,1711 @@
+'use client';
+
+import { nanoid } from 'nanoid';
+import { GalleryColumns, GalleryImage, SocialLink, SocialPlatform, TemplateBlock } from './types';
+import { useTemplate2Store } from './store';
+import { ensureUrlProtocol } from './validators';
+import { getBlockBackground, getBlockPadding, setBlockBackground, setBlockPadding, galleryCaptionsEnabled } from './blockStyle';
+import { formatButtonPadding, parseButtonPadding, parsePadding, updatePaddingVertical, updatePaddingHorizontal, ensureReadablePadding } from './parsePadding';
+import { RangeSlider } from './SpacingSlider';
+import { GISE_BRAND, BRAND_BG_PRESETS } from './brandColors';
+
+function findBlock(blocks: TemplateBlock[], id: string | null): TemplateBlock | null {
+  if (!id) return null;
+  for (const block of blocks) {
+    if (block.id === id) return block;
+    if (block.type === 'columns') {
+      const nested = findBlock([...block.content.left, ...block.content.right], id);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold text-gray-600">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputClass = 'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#ae256c]';
+const colorInputClass = 'h-10 w-14 shrink-0 cursor-pointer rounded-lg border border-gray-200 bg-white p-1';
+const socialPlatformOptions: { value: SocialPlatform; label: string }[] = [
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'x', label: 'X' },
+  { value: 'website', label: 'Website' },
+  { value: 'linkedin', label: 'LinkedIn' },
+];
+
+function inferSocialPlatform(link: SocialLink): SocialPlatform {
+  const value = `${link.platform || ''} ${link.label || ''} ${link.url || ''}`.toLowerCase();
+  if (value.includes('instagram')) return 'instagram';
+  if (value.includes('facebook') || value.includes('fb.com')) return 'facebook';
+  if (value.includes('twitter') || value.includes('x.com') || value.trim() === 'x') return 'x';
+  if (value.includes('linkedin')) return 'linkedin';
+  return 'website';
+}
+
+function colorPickerValue(value: string, fallback: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+function ColorField({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  fallback: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field label={label}>
+      <div className="flex gap-2">
+        <input type="color" value={colorPickerValue(value, fallback)} onChange={(event) => onChange(event.target.value)} className={colorInputClass} />
+        <input value={value} onChange={(event) => onChange(event.target.value)} className={inputClass} placeholder={fallback} />
+      </div>
+    </Field>
+  );
+}
+
+function ButtonColorFields({
+  bg,
+  color,
+  bgFallback,
+  colorFallback,
+  onBgChange,
+  onColorChange,
+}: {
+  bg: string;
+  color: string;
+  bgFallback: string;
+  colorFallback: string;
+  onBgChange: (value: string) => void;
+  onColorChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <ColorField label="Buton rengi" value={bg} fallback={bgFallback} onChange={onBgChange} />
+      <ColorField label="Buton yazı rengi" value={color} fallback={colorFallback} onChange={onColorChange} />
+    </div>
+  );
+}
+
+function parsePxValue(value: string | undefined, fallback: number): number {
+  const match = (value || '').trim().match(/^(-?\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : fallback;
+}
+
+function halfOfFontSize(fontSize: string, fallback = 13): string {
+  const px = Number.parseInt(fontSize, 10);
+  const base = Number.isFinite(px) ? px : fallback;
+  return `${Math.max(6, Math.round(base / 2))}px`;
+}
+
+function ButtonSizeControls({
+  fontSize,
+  padding,
+  marginTop,
+  marginBottom,
+  defaultFontSize = '16px',
+  defaultPadding = '14px 24px',
+  defaultMarginTop = 16,
+  defaultMarginBottom = 0,
+  fontMin = 6,
+  fontMax = 32,
+  verticalMax = 32,
+  horizontalMax = 48,
+  marginMin = -40,
+  marginMax = 80,
+  onFontSizeChange,
+  onPaddingChange,
+  onMarginTopChange,
+  onMarginBottomChange,
+}: {
+  fontSize: string;
+  padding: string;
+  marginTop?: string;
+  marginBottom?: string;
+  defaultFontSize?: string;
+  defaultPadding?: string;
+  defaultMarginTop?: number;
+  defaultMarginBottom?: number;
+  fontMin?: number;
+  fontMax?: number;
+  verticalMax?: number;
+  horizontalMax?: number;
+  marginMin?: number;
+  marginMax?: number;
+  onFontSizeChange: (value: string) => void;
+  onPaddingChange: (value: string) => void;
+  onMarginTopChange?: (value: string) => void;
+  onMarginBottomChange?: (value: string) => void;
+}) {
+  const btnPad = parseButtonPadding(padding || defaultPadding);
+  const fontPx = Number.parseInt(fontSize || defaultFontSize, 10) || Number.parseInt(defaultFontSize, 10) || 16;
+  const marginTopPx = parsePxValue(marginTop, defaultMarginTop);
+  const marginBottomPx = parsePxValue(marginBottom, defaultMarginBottom);
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+      <div>
+        <h3 className="text-xs font-bold text-gray-800">Buton Boyutu</h3>
+        <p className="mt-1 text-[11px] text-gray-500">Yazı boyutu, iç boşluk ve yazılardan aralığı ayarla. Mesafe eksi değere inebilir.</p>
+      </div>
+      <RangeSlider
+        label="Yazı boyutu"
+        value={fontPx}
+        min={fontMin}
+        max={fontMax}
+        step={1}
+        onChange={(value) => onFontSizeChange(`${value}px`)}
+      />
+      <RangeSlider
+        label="İç üst / alt"
+        value={btnPad.vertical}
+        min={2}
+        max={verticalMax}
+        step={1}
+        onChange={(vertical) => onPaddingChange(formatButtonPadding(vertical, btnPad.horizontal))}
+      />
+      <RangeSlider
+        label="İç sağ / sol"
+        value={btnPad.horizontal}
+        min={4}
+        max={horizontalMax}
+        step={1}
+        onChange={(horizontal) => onPaddingChange(formatButtonPadding(btnPad.vertical, horizontal))}
+      />
+      {onMarginTopChange ? (
+        <>
+          <RangeSlider
+            label="Üstten mesafe"
+            value={marginTopPx}
+            min={marginMin}
+            max={marginMax}
+            step={1}
+            onChange={(value) => onMarginTopChange(`${value}px`)}
+          />
+          {onMarginBottomChange ? (
+            <RangeSlider
+              label="Alttan mesafe"
+              value={marginBottomPx}
+              min={marginMin}
+              max={marginMax}
+              step={1}
+              onChange={(value) => onMarginBottomChange(`${value}px`)}
+            />
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function BrandColorPresets({ value, onSelect }: { value: string; onSelect: (color: string) => void }) {
+  return (
+    <div>
+      <span className="mb-2 block text-[11px] font-semibold text-gray-500">Hızlı renkler</span>
+      <div className="flex flex-wrap gap-2">
+        {BRAND_BG_PRESETS.map((preset) => {
+          const active = value.toLowerCase() === preset.color.toLowerCase();
+          return (
+            <button
+              key={preset.color}
+              type="button"
+              title={preset.label}
+              onClick={() => onSelect(preset.color)}
+              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-all ${
+                active ? 'border-[#ae256c] bg-[#fdf2f7] text-[#ae256c]' : 'border-gray-200 bg-white text-gray-600 hover:border-[#ae256c]/40'
+              }`}
+            >
+              <span className="h-4 w-4 shrink-0 rounded border border-black/10" style={{ background: preset.color }} />
+              {preset.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BlockBackgroundControls({ block }: { block: TemplateBlock }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const bg = getBlockBackground(block) || GISE_BRAND.contentBg;
+  const applyBg = (value: string) => updateBlock(block.id, (current) => setBlockBackground(current, value));
+
+  return (
+    <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 space-y-3">
+      <div>
+        <h3 className="text-xs font-bold text-gray-800">Blok Arka Planı</h3>
+        <p className="mt-1 text-[11px] text-gray-500">Seçili bloğun arka plan rengini buradan ayarla.</p>
+      </div>
+      <BrandColorPresets value={bg} onSelect={applyBg} />
+      <ColorField label="Arka plan rengi" value={bg} fallback={GISE_BRAND.contentBg} onChange={applyBg} />
+    </div>
+  );
+}
+
+function BlockSpacingControls({ block }: { block: TemplateBlock }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const paddingValue = getBlockPadding(block);
+  if (!paddingValue) return null;
+  const fallback = block.type === 'heading' ? '14px 10px' : '12px 10px';
+  const needsSidePadding = block.type === 'heading' || block.type === 'text';
+  const effectivePadding = needsSidePadding ? ensureReadablePadding(paddingValue, fallback, 10) : paddingValue;
+  const parsed = parsePadding(effectivePadding, fallback);
+  const blockLabel = block.type === 'heading' ? 'Başlık Boşluğu' : 'Blok Boşluğu';
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+      <div>
+        <h3 className="text-xs font-bold text-gray-800">{blockLabel}</h3>
+        <p className="mt-1 text-[11px] text-gray-500">Üst, alt ve yan boşlukları ayarla.</p>
+      </div>
+      <RangeSlider
+        label="Üst"
+        value={parsed.top}
+        min={0}
+        max={80}
+        onChange={(top) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            const next = updatePaddingVertical(currentPadding, top, parsePadding(currentPadding).bottom);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
+            );
+          })
+        }
+      />
+      <RangeSlider
+        label="Alt"
+        value={parsed.bottom}
+        min={0}
+        max={80}
+        onChange={(bottom) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            const next = updatePaddingVertical(currentPadding, parsePadding(currentPadding).top, bottom);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
+            );
+          })
+        }
+      />
+      <RangeSlider
+        label="Sol"
+        value={parsed.left}
+        min={needsSidePadding ? 10 : 0}
+        max={80}
+        onChange={(left) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            const next = updatePaddingHorizontal(currentPadding, left, parsePadding(currentPadding).right);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
+            );
+          })
+        }
+      />
+      <RangeSlider
+        label="Sağ"
+        value={parsed.right}
+        min={needsSidePadding ? 10 : 0}
+        max={80}
+        onChange={(right) =>
+          updateBlock(block.id, (current) => {
+            const currentPadding = getBlockPadding(current);
+            if (!currentPadding) return current;
+            const next = updatePaddingHorizontal(currentPadding, parsePadding(currentPadding).left, right);
+            return setBlockPadding(
+              current,
+              needsSidePadding ? ensureReadablePadding(next, fallback, 10) : next,
+            );
+          })
+        }
+      />
+    </div>
+  );
+}
+
+function TemplateAppearanceControls({
+  bgColor,
+  contentBgColor,
+  contentWidth,
+  fontFamily,
+  setSettings,
+  compact = false,
+}: {
+  bgColor: string;
+  contentBgColor: string;
+  contentWidth: number;
+  fontFamily: string;
+  setSettings: ReturnType<typeof useTemplate2Store.getState>['setSettings'];
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? 'rounded-xl border border-purple-100 bg-purple-50/50 p-3' : ''}>
+      {compact ? (
+        <div className="mb-3">
+          <h3 className="text-xs font-bold text-gray-800">Şablon Arka Planı</h3>
+          <p className="mt-1 text-[11px] text-gray-500">Tüm mailin dış ve içerik arka plan rengini buradan ayarla.</p>
+        </div>
+      ) : null}
+      <div className="space-y-4">
+        <ColorField label="Dış arka plan rengi" value={bgColor} fallback={GISE_BRAND.outerBg} onChange={(value) => setSettings({ bgColor: value })} />
+        <ColorField
+          label="İçerik arka plan rengi"
+          value={contentBgColor}
+          fallback={GISE_BRAND.contentBg}
+          onChange={(value) => setSettings({ contentBgColor: value })}
+        />
+        {!compact ? (
+          <>
+            <Field label="İçerik genişliği">
+              <input
+                type="number"
+                min={320}
+                max={800}
+                value={contentWidth}
+                onChange={(event) => setSettings({ contentWidth: Number(event.target.value) })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Font">
+              <select value={fontFamily} onChange={(event) => setSettings({ fontFamily: event.target.value })} className={inputClass}>
+                <option value="Arial, Helvetica, sans-serif">Arial</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="'Trebuchet MS', Arial, sans-serif">Trebuchet</option>
+                <option value="'Courier New', monospace">Courier</option>
+              </select>
+            </Field>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function createGalleryImage(index: number): GalleryImage {
+  return {
+    id: `gallery-image-${nanoid(8)}`,
+    src: '',
+    alt: `Görsel ${index + 1}`,
+    width: '100%',
+    caption: '',
+    showButton: true,
+    buttonText: 'Satın Al',
+    buttonTarget: '_blank',
+  };
+}
+
+function resizeGalleryImages(images: GalleryImage[], count: number): GalleryImage[] {
+  if (images.length === count) return images;
+  if (images.length > count) return images.slice(0, count);
+  return [...images, ...Array.from({ length: count - images.length }, (_, index) => createGalleryImage(images.length + index))];
+}
+
+export default function Inspector() {
+  const design = useTemplate2Store((state) => state.design);
+  const selectedId = useTemplate2Store((state) => state.selectedId);
+  const setSettings = useTemplate2Store((state) => state.setSettings);
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const addButtonBelow = useTemplate2Store((state) => state.addButtonBelow);
+  const block = findBlock(design.blocks, selectedId);
+
+  if (!block) {
+    return (
+      <aside className="h-full min-h-0 overflow-y-auto overscroll-contain border-l border-gray-200 bg-white p-4 pb-28">
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 border-b border-gray-200 bg-white px-4 py-4">
+          <h2 className="text-sm font-bold text-gray-900">Şablon Ayarları</h2>
+        </div>
+        <div className="mt-4 space-y-4">
+          <TemplateAppearanceControls
+            bgColor={design.settings.bgColor}
+            contentBgColor={design.settings.contentBgColor}
+            contentWidth={design.settings.contentWidth}
+            fontFamily={design.settings.fontFamily}
+            setSettings={setSettings}
+          />
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="h-full min-h-0 overflow-y-auto overscroll-contain border-l border-gray-200 bg-white p-4 pb-28">
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 border-b border-gray-200 bg-white px-4 py-4">
+        <h2 className="text-sm font-bold text-gray-900">Seçili Blok</h2>
+        <p className="mt-1 rounded-lg bg-gray-50 px-2 py-1 text-xs text-gray-500">{block.type}</p>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        <BlockBackgroundControls block={block} />
+        <BlockSpacingControls block={block} />
+
+        {block.type === 'heading' ? <TextStyleControls block={block} /> : null}
+
+        {block.type === 'text' ? <TextStyleControls block={block} /> : null}
+
+        {block.type === 'image' ? (
+          <>
+            <Field label="Görsel URL">
+              <input
+                value={block.content.src}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'image' ? { ...current, content: { ...current.content, src: ensureUrlProtocol(event.target.value) } } : current,
+                  )
+                }
+                placeholder="https://site.com/gorsel.jpg"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Alt metin">
+              <input
+                value={block.content.alt}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'image' ? { ...current, content: { ...current.content, alt: event.target.value } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Alt yazı">
+              <input
+                value={block.content.caption || ''}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'image' ? { ...current, content: { ...current.content, caption: event.target.value } } : current,
+                  )
+                }
+                placeholder="Görselin altında görünecek yazı"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Görsele tıklama linki">
+              <input
+                value={block.content.link || ''}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'image' ? { ...current, content: { ...current.content, link: ensureUrlProtocol(event.target.value) } } : current,
+                  )
+                }
+                placeholder="https://..."
+                className={inputClass}
+              />
+            </Field>
+            <ImageStyleControls block={block} />
+            <button
+              type="button"
+              onClick={() => addButtonBelow(block.id)}
+              className="w-full rounded-xl bg-gradient-to-r from-[#ae256c] to-[#20213f] px-4 py-2.5 text-sm font-semibold text-white hover:shadow-md transition-all"
+            >
+              Görselin Altına Buton Ekle
+            </button>
+          </>
+        ) : null}
+
+        {block.type === 'gallery' ? <GalleryControls block={block} /> : null}
+
+        {block.type === 'hero' ? (
+          <>
+            <Field label="Hero görsel URL">
+              <input
+                value={block.content.image || ''}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, content: { ...current.content, image: ensureUrlProtocol(event.target.value) } } : current,
+                  )
+                }
+                placeholder="https://site.com/hero.jpg"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Buton yazısı">
+              <input
+                value={block.content.buttonText || ''}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, content: { ...current.content, buttonText: event.target.value } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Buton linki">
+              <input
+                value={block.content.buttonUrl || ''}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, content: { ...current.content, buttonUrl: ensureUrlProtocol(event.target.value) } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Hero görsel boyutu">
+              <input
+                type="range"
+                min={20}
+                max={100}
+                value={Number.parseInt(block.style.imageWidth || '100%', 10) || 100}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, style: { ...current.style, imageWidth: `${event.target.value}%` } } : current,
+                  )
+                }
+                className="w-full"
+              />
+              <span className="mt-1 block text-xs text-gray-500">{block.style.imageWidth || '100%'}</span>
+            </Field>
+            <Field label="Yazı rengi">
+              <input
+                type="color"
+                value={block.style.textColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, style: { ...current.style, textColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+              <h3 className="text-xs font-bold text-gray-800">Hero Yazıları</h3>
+              <RangeSlider
+                label="Başlık boyutu"
+                value={Number.parseInt(block.style.titleFontSize || '32px', 10) || 32}
+                min={14}
+                max={64}
+                step={1}
+                onChange={(value) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, style: { ...current.style, titleFontSize: `${value}px` } } : current,
+                  )
+                }
+              />
+              <Field label="Başlık kalınlığı">
+                <select
+                  value={block.style.titleFontWeight || '800'}
+                  onChange={(event) =>
+                    updateBlock(block.id, (current) =>
+                      current.type === 'hero' ? { ...current, style: { ...current.style, titleFontWeight: event.target.value } } : current,
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="400">Normal</option>
+                  <option value="600">Semi Bold</option>
+                  <option value="700">Bold</option>
+                  <option value="800">Extra Bold</option>
+                </select>
+              </Field>
+              <RangeSlider
+                label="Alt yazı boyutu"
+                value={Number.parseInt(block.style.subtitleFontSize || '16px', 10) || 16}
+                min={10}
+                max={36}
+                step={1}
+                onChange={(value) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'hero' ? { ...current, style: { ...current.style, subtitleFontSize: `${value}px` } } : current,
+                  )
+                }
+              />
+              <Field label="Alt yazı kalınlığı">
+                <select
+                  value={block.style.subtitleFontWeight || '400'}
+                  onChange={(event) =>
+                    updateBlock(block.id, (current) =>
+                      current.type === 'hero' ? { ...current, style: { ...current.style, subtitleFontWeight: event.target.value } } : current,
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="400">Normal</option>
+                  <option value="600">Semi Bold</option>
+                  <option value="700">Bold</option>
+                  <option value="800">Extra Bold</option>
+                </select>
+              </Field>
+            </div>
+            <ButtonColorFields
+              bg={block.style.buttonBg ?? GISE_BRAND.primary}
+              color={block.style.buttonColor ?? GISE_BRAND.white}
+              bgFallback={GISE_BRAND.primary}
+              colorFallback={GISE_BRAND.white}
+              onBgChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonBg: value } } : current,
+                )
+              }
+              onColorChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonColor: value } } : current,
+                )
+              }
+            />
+            <ButtonSizeControls
+              fontSize={block.style.buttonFontSize ?? '15px'}
+              padding={block.style.buttonPadding ?? '13px 22px'}
+              marginTop={block.style.buttonMarginTop}
+              marginBottom={block.style.buttonMarginBottom}
+              defaultFontSize="15px"
+              defaultPadding="13px 22px"
+              defaultMarginTop={20}
+              defaultMarginBottom={0}
+              onFontSizeChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonFontSize: value } } : current,
+                )
+              }
+              onPaddingChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonPadding: value } } : current,
+                )
+              }
+              onMarginTopChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonMarginTop: value } } : current,
+                )
+              }
+              onMarginBottomChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'hero' ? { ...current, style: { ...current.style, buttonMarginBottom: value } } : current,
+                )
+              }
+            />
+            <AlignControl block={block} />
+          </>
+        ) : null}
+
+        {block.type === 'button' ? (
+          <>
+            <Field label="Link">
+              <input
+                value={block.content.url}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'button' ? { ...current, content: { ...current.content, url: ensureUrlProtocol(event.target.value) } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <ButtonColorFields
+              bg={block.style.bg}
+              color={block.style.color}
+              bgFallback={GISE_BRAND.primary}
+              colorFallback={GISE_BRAND.white}
+              onBgChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, bg: value } } : current,
+                )
+              }
+              onColorChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, color: value } } : current,
+                )
+              }
+            />
+            <ButtonSizeControls
+              fontSize={block.style.fontSize}
+              padding={block.style.padding}
+              defaultFontSize="16px"
+              defaultPadding="14px 24px"
+              onFontSizeChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, fontSize: value } } : current,
+                )
+              }
+              onPaddingChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'button' ? { ...current, style: { ...current.style, padding: value } } : current,
+                )
+              }
+            />
+            <AlignControl block={block} />
+          </>
+        ) : null}
+
+        {block.type === 'coupon' ? (
+          <>
+            <Field label="Kupon kodu">
+              <input
+                value={block.content.code}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'coupon' ? { ...current, content: { ...current.content, code: event.target.value } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Arka plan">
+              <input
+                type="color"
+                value={block.style.bg}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'coupon' ? { ...current, style: { ...current.style, bg: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Çerçeve rengi">
+              <input
+                type="color"
+                value={block.style.borderColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'coupon' ? { ...current, style: { ...current.style, borderColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Kod rengi">
+              <input
+                type="color"
+                value={block.style.codeColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'coupon' ? { ...current, style: { ...current.style, codeColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Kod boyutu">
+              <input
+                type="range"
+                min={18}
+                max={48}
+                value={Number.parseInt(block.style.codeFontSize, 10) || 28}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'coupon' ? { ...current, style: { ...current.style, codeFontSize: `${event.target.value}px` } } : current,
+                  )
+                }
+                className="w-full"
+              />
+              <span className="mt-1 block text-xs text-gray-500">{block.style.codeFontSize}</span>
+            </Field>
+            <AlignControl block={block} />
+          </>
+        ) : null}
+
+        {block.type === 'footer' ? (
+          <>
+            <Field label="Abonelikten çık metni">
+              <input
+                value={block.content.unsubscribeText}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer'
+                      ? { ...current, content: { ...current.content, unsubscribeText: event.target.value } }
+                      : current,
+                  )
+                }
+                placeholder="Abonelikten çık"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Abonelikten çık linki">
+              <input
+                value={block.content.unsubscribeUrl}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer'
+                      ? { ...current, content: { ...current.content, unsubscribeUrl: ensureUrlProtocol(event.target.value) } }
+                      : current,
+                  )
+                }
+                placeholder="{{UNSUBSCRIBE_URL}}"
+                className={inputClass}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Otomatik doldurulur — <code>{'{{UNSUBSCRIBE_URL}}'}</code> bırakın. Önizlemede örnek link açılır; gerçek mailde kişiye özel olur.
+              </p>
+            </Field>
+            <Field label="Arka plan">
+              <input
+                type="color"
+                value={block.style.bg}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer' ? { ...current, style: { ...current.style, bg: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Yazı rengi">
+              <input
+                type="color"
+                value={block.style.color}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer' ? { ...current, style: { ...current.style, color: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Buton rengi">
+              <input
+                type="color"
+                value={block.style.linkColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer' ? { ...current, style: { ...current.style, linkColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Font boyutu">
+              <input
+                value={block.style.fontSize}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'footer' ? { ...current, style: { ...current.style, fontSize: event.target.value } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <AlignControl block={block} />
+          </>
+        ) : null}
+
+        {block.type === 'product' ? (
+          <>
+            <Field label="Ürün görsel URL">
+              <input
+                value={block.content.image || ''}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product'
+                      ? { ...current, content: { ...current.content, image: ensureUrlProtocol(event.target.value) } }
+                      : current,
+                  )
+                }
+                placeholder="https://site.com/urun.jpg"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Buton yazısı">
+              <input
+                value={block.content.buttonText}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product' ? { ...current, content: { ...current.content, buttonText: event.target.value } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Buton linki">
+              <input
+                value={block.content.buttonUrl}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product'
+                      ? { ...current, content: { ...current.content, buttonUrl: ensureUrlProtocol(event.target.value) } }
+                      : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Ürün görsel boyutu">
+              <input
+                type="range"
+                min={20}
+                max={100}
+                value={Number.parseInt(block.style.imageWidth || '100%', 10) || 100}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product' ? { ...current, style: { ...current.style, imageWidth: `${event.target.value}%` } } : current,
+                  )
+                }
+                className="w-full"
+              />
+              <span className="mt-1 block text-xs text-gray-500">{block.style.imageWidth || '100%'}</span>
+            </Field>
+            <Field label="Arka plan">
+              <input
+                type="color"
+                value={block.style.bg}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product' ? { ...current, style: { ...current.style, bg: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Başlık rengi">
+              <input
+                type="color"
+                value={block.style.titleColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product' ? { ...current, style: { ...current.style, titleColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Fiyat rengi">
+              <input
+                type="color"
+                value={block.style.priceColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'product' ? { ...current, style: { ...current.style, priceColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <ButtonColorFields
+              bg={block.style.buttonBg}
+              color={block.style.buttonColor}
+              bgFallback={GISE_BRAND.primary}
+              colorFallback={GISE_BRAND.white}
+              onBgChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonBg: value } } : current,
+                )
+              }
+              onColorChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonColor: value } } : current,
+                )
+              }
+            />
+            <ButtonSizeControls
+              fontSize={block.style.buttonFontSize ?? '15px'}
+              padding={block.style.buttonPadding ?? '13px 22px'}
+              marginTop={block.style.buttonMarginTop}
+              marginBottom={block.style.buttonMarginBottom}
+              defaultFontSize="15px"
+              defaultPadding="13px 22px"
+              defaultMarginTop={16}
+              defaultMarginBottom={0}
+              onFontSizeChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonFontSize: value } } : current,
+                )
+              }
+              onPaddingChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonPadding: value } } : current,
+                )
+              }
+              onMarginTopChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonMarginTop: value } } : current,
+                )
+              }
+              onMarginBottomChange={(value) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'product' ? { ...current, style: { ...current.style, buttonMarginBottom: value } } : current,
+                )
+              }
+            />
+            <AlignControl block={block} />
+          </>
+        ) : null}
+
+        {block.type === 'social' ? (
+          <>
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+              <div className="text-xs font-bold text-gray-600">Sosyal Linkler</div>
+              {block.content.links.map((link) => (
+                <div key={link.id} className="space-y-2 rounded-lg bg-white p-3">
+                  <select
+                    value={inferSocialPlatform(link)}
+                    onChange={(event) =>
+                      updateBlock(block.id, (current) =>
+                        current.type === 'social'
+                          ? {
+                              ...current,
+                              content: {
+                                ...current.content,
+                                links: current.content.links.map((item) => {
+                                  if (item.id !== link.id) return item;
+                                  const platform = event.target.value as SocialPlatform;
+                                  const label = socialPlatformOptions.find((option) => option.value === platform)?.label || item.label;
+                                  return { ...item, platform, label };
+                                }),
+                              },
+                            }
+                          : current,
+                      )
+                    }
+                    className={inputClass}
+                  >
+                    {socialPlatformOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={link.url}
+                    onChange={(event) =>
+                      updateBlock(block.id, (current) =>
+                        current.type === 'social'
+                          ? {
+                              ...current,
+                              content: {
+                                ...current.content,
+                                links: current.content.links.map((item) =>
+                                  item.id === link.id ? { ...item, url: ensureUrlProtocol(event.target.value) } : item,
+                                ),
+                              },
+                            }
+                          : current,
+                      )
+                    }
+                    className={inputClass}
+                    placeholder="https://..."
+                  />
+                </div>
+              ))}
+            </div>
+            <Field label="Arka plan">
+              <input
+                type="color"
+                value={block.style.bg}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'social' ? { ...current, style: { ...current.style, bg: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Link arka planı">
+              <input
+                type="color"
+                value={block.style.linkBg}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'social' ? { ...current, style: { ...current.style, linkBg: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Link rengi">
+              <input
+                type="color"
+                value={block.style.linkColor}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'social' ? { ...current, style: { ...current.style, linkColor: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <AlignControl block={block} />
+          </>
+        ) : null}
+
+        {block.type === 'divider' ? (
+          <>
+            <Field label="Renk">
+              <input
+                type="color"
+                value={block.style.color}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'divider' ? { ...current, style: { ...current.style, color: event.target.value } } : current,
+                  )
+                }
+                className="h-10 w-full"
+              />
+            </Field>
+            <Field label="Kalınlık">
+              <input
+                value={block.style.thickness}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'divider' ? { ...current, style: { ...current.style, thickness: event.target.value } } : current,
+                  )
+                }
+                className={inputClass}
+              />
+            </Field>
+          </>
+        ) : null}
+
+        {block.type === 'spacer' ? (
+          <Field label="Yükseklik">
+            <input
+              value={block.style.height}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'spacer' ? { ...current, style: { ...current.style, height: event.target.value } } : current,
+                )
+              }
+              className={inputClass}
+            />
+          </Field>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
+function FontWeightSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field label={label}>
+      <select value={value || '400'} onChange={(event) => onChange(event.target.value)} className={inputClass}>
+        <option value="400">Normal</option>
+        <option value="600">Semi Bold</option>
+        <option value="700">Bold</option>
+        <option value="800">Extra Bold</option>
+      </select>
+    </Field>
+  );
+}
+
+function AlignControl({ block }: { block: Extract<TemplateBlock, { style: { align: string } }> }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  return (
+    <Field label="Hizalama">
+      <select
+        value={block.style.align}
+        onChange={(event) =>
+          updateBlock(block.id, (current) =>
+            'align' in current.style
+              ? ({ ...current, style: { ...current.style, align: event.target.value as 'left' | 'center' | 'right' } } as TemplateBlock)
+              : current,
+          )
+        }
+        className={inputClass}
+      >
+        <option value="left">Sol</option>
+        <option value="center">Orta</option>
+        <option value="right">Sağ</option>
+      </select>
+    </Field>
+  );
+}
+
+function TextStyleControls({ block }: { block: Extract<TemplateBlock, { style: { color: string; fontSize?: string; align: string } }> }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  return (
+    <>
+      <Field label="Yazı rengi">
+        <input
+          type="color"
+          value={block.style.color}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              'color' in current.style ? ({ ...current, style: { ...current.style, color: event.target.value } } as TemplateBlock) : current,
+            )
+          }
+          className="h-10 w-full"
+        />
+      </Field>
+      {'fontSize' in block.style ? (
+        <Field label="Font boyutu">
+          <input
+            type="range"
+            min={10}
+            max={64}
+            value={Number.parseInt(block.style.fontSize, 10) || 16}
+            onChange={(event) =>
+              updateBlock(block.id, (current) =>
+                'fontSize' in current.style
+                  ? ({ ...current, style: { ...current.style, fontSize: `${event.target.value}px` } } as TemplateBlock)
+                  : current,
+              )
+            }
+            className="w-full"
+          />
+          <span className="mt-1 block text-xs text-gray-500">{block.style.fontSize}</span>
+        </Field>
+      ) : null}
+      <AlignControl block={block} />
+    </>
+  );
+}
+
+function ImageStyleControls({ block }: { block: Extract<TemplateBlock, { type: 'image' }> }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  return (
+    <>
+      <Field label="Genişlik">
+        <input
+          type="range"
+          min={20}
+          max={100}
+          value={Number.parseInt(block.style.width, 10) || 100}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'image' ? { ...current, style: { ...current.style, width: `${event.target.value}%` } } : current,
+            )
+          }
+          className="w-full"
+        />
+        <span className="mt-1 block text-xs text-gray-500">{block.style.width}</span>
+      </Field>
+      <Field label="Radius">
+        <input
+          value={block.style.borderRadius}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'image' ? { ...current, style: { ...current.style, borderRadius: event.target.value } } : current,
+            )
+          }
+          className={inputClass}
+        />
+      </Field>
+      <AlignControl block={block} />
+      <Field label="Alt yazı rengi">
+        <input
+          type="color"
+          value={block.style.captionColor}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'image' ? { ...current, style: { ...current.style, captionColor: event.target.value } } : current,
+            )
+          }
+          className="h-10 w-full"
+        />
+      </Field>
+      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+        <RangeSlider
+          label="Alt yazı boyutu"
+          value={Number.parseInt(block.style.captionFontSize || '13px', 10) || 13}
+          min={8}
+          max={32}
+          step={1}
+          onChange={(value) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'image' ? { ...current, style: { ...current.style, captionFontSize: `${value}px` } } : current,
+            )
+          }
+        />
+        <FontWeightSelect
+          label="Alt yazı kalınlığı"
+          value={block.style.captionFontWeight || '400'}
+          onChange={(value) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'image' ? { ...current, style: { ...current.style, captionFontWeight: value } } : current,
+            )
+          }
+        />
+      </div>
+    </>
+  );
+}
+
+function GalleryControls({ block }: { block: Extract<TemplateBlock, { type: 'gallery' }> }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  const captionsRequired = galleryCaptionsEnabled(block);
+
+  return (
+    <>
+      <Field label="Galeri tipi">
+        <select
+          value={block.style.columns}
+          onChange={(event) => {
+            const columns = Number(event.target.value) as GalleryColumns;
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery'
+                ? {
+                    ...current,
+                    content: {
+                      ...current.content,
+                      images: resizeGalleryImages(current.content.images, columns),
+                    },
+                    style: { ...current.style, columns },
+                  }
+                : current,
+            );
+          }}
+          className={inputClass}
+        >
+          <option value={2}>2'li Görsel</option>
+          <option value={3}>3'lü Görsel</option>
+          <option value={4}>4'lü Görsel</option>
+          <option value={5}>5'li Görsel</option>
+        </select>
+      </Field>
+      <Field label="Toplu görsel boyutu">
+        <input
+          type="range"
+          min={30}
+          max={100}
+          value={Number.parseInt(block.style.imageWidth, 10) || 100}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery'
+                ? {
+                    ...current,
+                    style: { ...current.style, imageWidth: `${event.target.value}%` },
+                    content: {
+                      ...current.content,
+                      // Toplu boyut değişince tekil override'ları temizle — slider görünsün
+                      images: current.content.images.map((item) => ({ ...item, width: undefined })),
+                    },
+                  }
+                : current,
+            )
+          }
+          className="w-full"
+        />
+        <span className="mt-1 block text-xs text-gray-500">{block.style.imageWidth}</span>
+      </Field>
+      <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <div className="text-xs font-bold text-gray-600">Görsel Altı Butonlar</div>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={block.content.showButtons ?? true}
+            onChange={(event) =>
+              updateBlock(block.id, (current) =>
+                current.type === 'gallery'
+                  ? { ...current, content: { ...current.content, showButtons: event.target.checked } }
+                  : current,
+              )
+            }
+            className="rounded border-gray-300"
+          />
+          Her görselin altında buton göster
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Buton rengi</span>
+            <input
+              type="color"
+              value={colorPickerValue(block.style.buttonBg ?? '', GISE_BRAND.primary)}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? { ...current, style: { ...current.style, buttonBg: event.target.value } }
+                    : current,
+                )
+              }
+              className={colorInputClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-gray-500">Buton yazı rengi</span>
+            <input
+              type="color"
+              value={colorPickerValue(block.style.buttonColor ?? '', GISE_BRAND.white)}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? { ...current, style: { ...current.style, buttonColor: event.target.value } }
+                    : current,
+                )
+              }
+              className={colorInputClass}
+            />
+          </label>
+        </div>
+      </div>
+      <ButtonSizeControls
+        fontSize={block.style.buttonFontSize ?? '12px'}
+        padding={block.style.buttonPadding ?? '8px 12px'}
+        marginTop={block.style.buttonMarginTop}
+        marginBottom={block.style.buttonMarginBottom}
+        defaultFontSize="12px"
+        defaultPadding="8px 12px"
+        defaultMarginTop={8}
+        defaultMarginBottom={0}
+        fontMax={24}
+        verticalMax={24}
+        horizontalMax={32}
+        onFontSizeChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonFontSize: value } } : current,
+          )
+        }
+        onPaddingChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonPadding: value } } : current,
+          )
+        }
+        onMarginTopChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonMarginTop: value } } : current,
+          )
+        }
+        onMarginBottomChange={(value) =>
+          updateBlock(block.id, (current) =>
+            current.type === 'gallery' ? { ...current, style: { ...current.style, buttonMarginBottom: value } } : current,
+          )
+        }
+      />
+      <Field label="Buton köşe yuvarlaklığı">
+        <input
+          value={block.style.buttonRadius ?? '8px'}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, buttonRadius: event.target.value } } : current,
+            )
+          }
+          className={inputClass}
+          placeholder="8px"
+        />
+      </Field>
+      <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <div className="text-xs font-bold text-gray-600">Görsel URL, Link ve Butonlar</div>
+        {block.content.images.slice(0, block.style.columns).map((image, index) => (
+          <div key={image.id} className="space-y-2 rounded-lg bg-white p-3">
+            <div className="text-xs font-semibold text-gray-500">Görsel {index + 1}</div>
+            <input
+              value={image.src}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id ? { ...item, src: ensureUrlProtocol(event.target.value) } : item,
+                          ),
+                        },
+                      }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="Görsel URL: https://..."
+            />
+            <input
+              value={image.link || ''}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id ? { ...item, link: ensureUrlProtocol(event.target.value) } : item,
+                          ),
+                        },
+                      }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="Tıklama linki: https://..."
+            />
+            <input
+              value={image.caption || ''}
+              onChange={(event) =>
+                updateBlock(block.id, (current) => {
+                  if (current.type !== 'gallery') return current;
+                  const images = current.content.images.map((item) =>
+                    item.id === image.id ? { ...item, caption: event.target.value } : item,
+                  );
+                  const visible = images.slice(0, current.style.columns);
+                  const captionsEnabled = visible.some((item) => Boolean(item.caption?.trim()));
+                  return {
+                    ...current,
+                    content: { ...current.content, images, captionsEnabled },
+                  };
+                })
+              }
+              className={inputClass}
+              placeholder={captionsRequired ? 'Alt yazı (zorunlu)' : 'Alt yazı (opsiyonel)'}
+            />
+            <input
+              value={image.buttonText ?? 'Satın Al'}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id ? { ...item, buttonText: event.target.value, showButton: true } : item,
+                          ),
+                        },
+                      }
+                    : current,
+                )
+              }
+              className={inputClass}
+              placeholder="Buton yazısı (örn: Satın Al)"
+            />
+            <input
+              value={image.buttonUrl ?? ''}
+              onChange={(event) =>
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id
+                              ? { ...item, buttonUrl: event.target.value, showButton: true }
+                              : item,
+                          ),
+                        },
+                      }
+                    : current,
+                )
+              }
+              onBlur={(event) => {
+                const raw = event.target.value.trim();
+                if (!raw) return;
+                updateBlock(block.id, (current) =>
+                  current.type === 'gallery'
+                    ? {
+                        ...current,
+                        content: {
+                          ...current.content,
+                          images: current.content.images.map((item) =>
+                            item.id === image.id
+                              ? { ...item, buttonUrl: ensureUrlProtocol(raw), showButton: true }
+                              : item,
+                          ),
+                        },
+                      }
+                    : current,
+                );
+              }}
+              className={inputClass}
+              placeholder="Buton linki: https://..."
+            />
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={image.showButton ?? true}
+                onChange={(event) =>
+                  updateBlock(block.id, (current) =>
+                    current.type === 'gallery'
+                      ? {
+                          ...current,
+                          content: {
+                            ...current.content,
+                            images: current.content.images.map((item) =>
+                              item.id === image.id ? { ...item, showButton: event.target.checked } : item,
+                            ),
+                          },
+                        }
+                      : current,
+                  )
+                }
+                className="rounded border-gray-300"
+              />
+              Bu görselde buton göster
+            </label>
+          </div>
+        ))}
+      </div>
+      <GalleryStyleControls block={block} />
+    </>
+  );
+}
+
+function GalleryStyleControls({ block }: { block: Extract<TemplateBlock, { type: 'gallery' }> }) {
+  const updateBlock = useTemplate2Store((state) => state.updateBlock);
+  return (
+    <>
+      <Field label="Görseller arası boşluk">
+        <input
+          value={block.style.gap}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, gap: event.target.value } } : current,
+            )
+          }
+          className={inputClass}
+        />
+      </Field>
+      <Field label="Radius">
+        <input
+          value={block.style.borderRadius}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, borderRadius: event.target.value } } : current,
+            )
+          }
+          className={inputClass}
+        />
+      </Field>
+      <Field label="Alt yazı rengi">
+        <input
+          type="color"
+          value={block.style.captionColor}
+          onChange={(event) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, captionColor: event.target.value } } : current,
+            )
+          }
+          className="h-10 w-full"
+        />
+      </Field>
+      <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+        <p className="text-[11px] text-gray-500">Alt yazı boyutu buton yazısından bağımsızdır.</p>
+        <RangeSlider
+          label="Alt yazı boyutu"
+          value={Number.parseInt(block.style.captionFontSize || '13px', 10) || 13}
+          min={8}
+          max={32}
+          step={1}
+          onChange={(value) => {
+            const captionFontSize = `${value}px`;
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery'
+                ? { ...current, style: { ...current.style, captionFontSize } }
+                : current,
+            );
+          }}
+        />
+        <FontWeightSelect
+          label="Alt yazı kalınlığı"
+          value={block.style.captionFontWeight || '400'}
+          onChange={(value) =>
+            updateBlock(block.id, (current) =>
+              current.type === 'gallery' ? { ...current, style: { ...current.style, captionFontWeight: value } } : current,
+            )
+          }
+        />
+      </div>
+      <AlignControl block={block} />
+    </>
+  );
+}

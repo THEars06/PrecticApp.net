@@ -11,15 +11,21 @@ interface Props {
   file: File;
   onComplete: (url: string, width: number, height: number) => void;
   onClose: () => void;
+  defaultAspect?: number;
+  lockAspect?: boolean;
 }
 
-export default function ImageCropModal({ file, onComplete, onClose }: Props) {
+export default function ImageCropModal({ file, onComplete, onClose, defaultAspect, lockAspect = false }: Props) {
   const [imgSrc, setImgSrc] = useState('');
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [uploading, setUploading] = useState(false);
-  const [aspect, setAspect] = useState<number | undefined>(undefined);
+  const [aspect, setAspect] = useState<number | undefined>(defaultAspect);
   const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    setAspect(defaultAspect);
+  }, [defaultAspect, file]);
 
   useEffect(() => {
     const reader = new FileReader();
@@ -121,7 +127,8 @@ export default function ImageCropModal({ file, onComplete, onClose }: Props) {
         </div>
 
         {/* Aspect Ratio Seçimi */}
-        <div className="flex items-center gap-2 px-6 py-3 border-b border-gray-100 bg-gray-50">
+        {!lockAspect ? (
+        <div className="flex items-center gap-2 px-6 py-3 border-b border-gray-100 bg-gray-50 flex-wrap">
           <span className="text-xs font-medium text-gray-500 mr-1">Oran:</span>
           {[
             { label: 'Serbest', value: undefined },
@@ -144,6 +151,11 @@ export default function ImageCropModal({ file, onComplete, onClose }: Props) {
             </button>
           ))}
         </div>
+        ) : (
+        <div className="px-6 py-3 border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
+          Galeri görselleri aynı oranda kırpılır ({defaultAspect === 1 ? '1:1' : 'sabit oran'}).
+        </div>
+        )}
 
         {/* Crop Alanı */}
         <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-gray-100 min-h-0">

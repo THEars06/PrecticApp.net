@@ -10,19 +10,19 @@ export const editorBlocks = [
     id: 'text',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><path d="M3 7h18M3 12h18M3 17h12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><div class="gjs-block-label">Metin</div>',
     category: 'Temel',
-    content: '<p style="padding:10px;font-size:16px;line-height:1.6;width:100%;">Metin içeriği buraya yazın...</p>',
+    content: '<p style="padding:10px;font-size:16px;line-height:1.6;width:100%;border-radius:1px;">Metin içeriği buraya yazın...</p>',
   },
   {
     id: 'heading',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><text x="3" y="18" font-size="17" font-weight="bold" fill="currentColor">H1</text></svg><div class="gjs-block-label">Başlık</div>',
     category: 'Temel',
-    content: '<h1 style="padding:10px;font-size:32px;font-weight:700;line-height:1.2;width:100%;">Başlık</h1>',
+    content: '<h1 style="padding:10px;font-size:32px;font-weight:700;line-height:1.2;width:100%;border-radius:1px;">Başlık</h1>',
   },
   {
     id: 'subheading',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><text x="3" y="18" font-size="14" font-weight="bold" fill="currentColor">H2</text></svg><div class="gjs-block-label">Alt Başlık</div>',
     category: 'Temel',
-    content: '<h2 style="padding:10px;font-size:22px;font-weight:600;width:100%;">Alt Başlık</h2>',
+    content: '<h2 style="padding:10px;font-size:22px;font-weight:600;width:100%;border-radius:1px;">Alt Başlık</h2>',
   },
   {
     id: 'image',
@@ -35,6 +35,12 @@ export const editorBlocks = [
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="1.5" fill="none"/></svg><div class="gjs-block-label">Linkli Görsel</div>',
     category: 'Temel',
     content: { type: 'link-image' },
+  },
+  {
+    id: 'image-with-button',
+    label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><rect x="3" y="2" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="17" width="12" height="5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">Görsel + Buton</div>',
+    category: 'Temel',
+    content: { type: 'image-with-button' },
   },
   {
     id: 'button',
@@ -71,7 +77,7 @@ export const editorBlocks = [
     id: 'two-columns',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="13" y="3" width="8" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">2 Sütun</div>',
     category: 'Düzen',
-    content: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;"><tr><td style="width:50%;padding:10px;" valign="top"></td><td style="width:50%;padding:10px;" valign="top"></td></tr></table>`,
+    content: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;"><tr><td class="email-col-stack" style="width:50%;padding:10px;" valign="top"></td><td class="email-col-stack" style="width:50%;padding:10px;" valign="top"></td></tr></table>`,
   },
   {
     id: 'two-columns-gap',
@@ -83,7 +89,7 @@ export const editorBlocks = [
     id: 'three-columns',
     label: '<svg class="w-7 h-7" viewBox="0 0 24 24"><rect x="2" y="3" width="6" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="3" width="6" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="16" y="3" width="6" height="18" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div class="gjs-block-label">3 Sütun</div>',
     category: 'Düzen',
-    content: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;"><tr><td style="width:33.33%;padding:10px;" valign="top"></td><td style="width:33.33%;padding:10px;" valign="top"></td><td style="width:33.33%;padding:10px;" valign="top"></td></tr></table>`,
+    content: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;"><tr><td class="email-col-stack" style="width:33.33%;padding:10px;" valign="top"></td><td class="email-col-stack" style="width:33.33%;padding:10px;" valign="top"></td><td class="email-col-stack" style="width:33.33%;padding:10px;" valign="top"></td></tr></table>`,
   },
   {
     id: 'four-columns',
@@ -248,7 +254,7 @@ export const editorBlocks = [
     category: 'Mail',
     content: `<div style="background-color:#f9fafb;padding:30px 20px;text-align:center;border-top:1px solid #e5e7eb;">
   <p style="color:#6b7280;font-size:14px;margin:0 0 10px;">© 2025 Şirket Adı. Tüm hakları saklıdır.</p>
-  <p style="color:#9ca3af;font-size:12px;margin:0;">Bu e-postayı almak istemiyorsanız <a href="#" style="color:#6b7280;">abonelikten çıkın</a>.</p>
+  <p style="color:#9ca3af;font-size:12px;margin:0;">Bu e-postayı almak istemiyorsanız <a href="{{UNSUBSCRIBE_URL}}" style="color:#6b7280;">abonelikten çıkın</a>.</p>
 </div>`,
   },
   // ─── ETKİNLİK ───

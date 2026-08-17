@@ -8,8 +8,9 @@ export const editorCanvasCss = `
   body {
     margin: 0 auto !important;
     padding: 0 !important;
-    width: 600px !important;
+    width: 100% !important;
     max-width: 600px !important;
+    min-width: 0 !important;
     min-height: 3000px;
     height: auto;
     position: relative;
@@ -52,5 +53,29 @@ export const editorCanvasCss = `
     border: 1px dashed #d0d0d0;
     border-radius: 4px;
     pointer-events: none;
+  }
+  /* Mobil cihaz önizlemesi — sütunlar alt alta */
+  @media (max-width: 480px) {
+    body {
+      max-width: 100% !important;
+      border-left: none;
+      border-right: none;
+    }
+    table[role="presentation"] {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    td.email-col-stack,
+    th.email-col-stack {
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    img {
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+    }
   }
 `;
