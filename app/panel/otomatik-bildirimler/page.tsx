@@ -19,6 +19,9 @@ type Binding = {
   pushTitle: string | null;
   pushBody: string | null;
   pushApp: string;
+  mailReasonText: string | null;
+  smsReasonText: string | null;
+  pushReasonText: string | null;
 };
 
 type Option = { id: string; name: string };
@@ -143,6 +146,9 @@ export default function OtomatikBildirimlerPage() {
             pushTitle: b.pushTitle,
             pushBody: b.pushBody,
             pushApp: b.pushApp || 'legacy',
+            mailReasonText: b.mailReasonText,
+            smsReasonText: b.smsReasonText,
+            pushReasonText: b.pushReasonText,
           }),
         },
       );
@@ -169,6 +175,10 @@ export default function OtomatikBildirimlerPage() {
           email: testEmail || undefined,
           phone: testPhone || undefined,
           fullName: 'Test Kullanici',
+          refundReason: 'Test iptal / iade sebebi',
+          refundReasonMail: 'Test mail sebebi',
+          refundReasonSms: 'Test SMS',
+          refundReasonPush: 'Test push',
         }),
       });
       const data = await res.json();
@@ -423,6 +433,55 @@ export default function OtomatikBildirimlerPage() {
               {(b.pushBody || '').length}/400 — {'{{eventName}} {{amount}} {{currency}}'} desteklenir
             </span>
           </label>
+
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 space-y-3">
+            <p className="text-sm font-medium text-gray-700">
+              İade / iptal sebebi (Gişe panelden gelir)
+            </p>
+            <p className="text-xs text-gray-500">
+              Sebep girildiyse kanal bazlı metin eklenir. Boş bırakırsanız sebep satırı gitmez. {'{{refundReason}}'} kullanın.
+            </p>
+            <label className="block text-sm text-gray-600">
+              Mail sebep satırı
+              <input
+                className="mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm"
+                value={b.mailReasonText || ''}
+                onChange={(e) =>
+                  updateLocal(b.eventKey, {
+                    mailReasonText: e.target.value || null,
+                  })
+                }
+                placeholder="İptal sebebi: {{refundReason}}"
+              />
+            </label>
+            <label className="block text-sm text-gray-600">
+              SMS sebep satırı
+              <input
+                className="mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm"
+                value={b.smsReasonText || ''}
+                onChange={(e) =>
+                  updateLocal(b.eventKey, {
+                    smsReasonText: e.target.value || null,
+                  })
+                }
+                placeholder="Sebep: {{refundReason}}."
+              />
+            </label>
+            <label className="block text-sm text-gray-600">
+              Push sebep satırı
+              <input
+                className="mt-1 w-full rounded border border-gray-200 px-3 py-2 text-sm"
+                maxLength={200}
+                value={b.pushReasonText || ''}
+                onChange={(e) =>
+                  updateLocal(b.eventKey, {
+                    pushReasonText: e.target.value || null,
+                  })
+                }
+                placeholder="Sebep: {{refundReason}}."
+              />
+            </label>
+          </div>
         </div>
       ))}
     </div>
