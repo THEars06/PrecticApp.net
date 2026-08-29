@@ -10,6 +10,12 @@ const PLACEHOLDERS = [
   { key: '{{firstName}}', label: 'Ad' },
   { key: '{{email}}', label: 'E-posta' },
   { key: '{{phoneNumber}}', label: 'Telefon' },
+  { key: '{{eventName}}', label: 'Etkinlik' },
+  { key: '{{eventDate}}', label: 'Tarih' },
+  { key: '{{eventVenue}}', label: 'Mekan' },
+  { key: '{{pnr}}', label: 'PNR' },
+  { key: '{{amount}}', label: 'Tutar' },
+  { key: '{{currency}}', label: 'Para birimi' },
 ] as const;
 
 type SmsTemplate = {
