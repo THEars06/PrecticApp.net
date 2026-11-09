@@ -27,8 +27,9 @@ type Binding = {
 type Option = { id: string; name: string };
 
 const EVENT_LABELS: Record<string, string> = {
-  refund_success: 'İade Tamamlandı',
+  refund_success: 'İade Bildirimi',
   event_cancelled: 'Etkinlik İptali',
+  event_postponed: 'Etkinlik Ertelendi',
 };
 
 export default function OtomatikBildirimlerPage() {
